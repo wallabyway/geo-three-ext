@@ -52,3 +52,6 @@ This will move the Forge-Viewer camera to the (LAT, LONG) position on Earth.
 
 - Simple mapbox Tiles extension https://gist.github.com/wallabyway/4503609e84a2b612b27138abba8aa3b7
 - Using Mapbox VIewer with Revit files (via glTF)  https://github.com/wallabyway/mapboxRevit
+- How to retrieve Geo data inside Revit (browser): https://forge.autodesk.com/blog/mini-map-geolocation-extension
+- How to decode aecModelData.json to retrieve Revit/Autocad Geo info: https://forge.autodesk.com/blog/consume-aec-data-which-are-model-derivative-api
+- For Navisworks: see latest blog https://forge.autodesk.com/author/eason-kang
