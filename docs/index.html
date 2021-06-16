@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="https://wallabyway.github.io/floor-animation/skeleton.min.css">
+    <title>(Forge) Geo-Three Extension</title>
+</head>
+
+<body onload="init('dXJuOmFkc2sub2JqZWN0czpvcy5vYmplY3Q6Y29uc29saWRhdGVkL3JtZV9hZHZhbmNlZF9zYW1wbGVfcHJvamVjdC5ydnQ')" style="margin:0; overflow-y: hidden;">
+ <div class="container">
+    <nav class="navbar">
+      <div class="container">
+        <ul class="navbar-list">
+          <li class="navbar-item"><img class="navbar-button navbar-img" src="https://wallabyway.github.io/floor-animation/logo.png"/></li>
+          <li class="navbar-item"><button onClick="alert('dummy1')" class="navbar-button button-primary">Button1</button></li>
+          <li class="navbar-item"><button onClick="alert('dummy2')" class="navbar-button button-primary">Button2</button></li>
+          <li class="navbar-itemr mobile"><a class="navbar-button button" href="https://github.com/wallabyway">Github</a></li>
+        </ul>
+      </div>
+    </nav>
+  </div>
+  <div id="forgeViewer"></div>
+</body>
+
+<link rel="stylesheet" href="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/style.css">
+<script src="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/viewer3D.js"></script>
+<script src="https://rtvnonbl58.execute-api.us-east-1.amazonaws.com/latest/_adsk.js"></script>
+
+<script>
+let viewer = null;
+
+function init(urn) {
+
+    const options = {
+        env: 'AutodeskProduction',
+        accessToken: _access_token,
+        isAEC: true
+    };
+
+    Autodesk.Viewing.Initializer(options, () => {
+
+        const div = document.getElementById('forgeViewer');
+
+        const config = { extensions: ["GeoThreeExtension"] };
+
+        viewer = new Autodesk.Viewing.Private.GuiViewer3D(div, config);
+        viewer.start();
+        viewer.setTheme("light-theme");
+        Autodesk.Viewing.Document.load(`urn:${urn}`, (doc) => {
+            //var viewables = doc.getRoot().getDefaultGeometry();
+            let viewables = doc.getRoot().search({role:'3d', type: "geometry"})[1];
+            viewer.loadDocumentNode(doc, viewables).then( onLoadFinished );
+        });
+    });
+
+    function onLoadFinished() {
+    }
+}
+</script>
+
+<script type="text/javascript" src="./geo-three.ext.js"></script>
+
