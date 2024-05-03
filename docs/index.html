@@ -28,17 +28,19 @@
 
 <link rel="stylesheet" href="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/style.css">
 <script src="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/viewer3D.js"></script>
-<script src="https://6jm6lvl74k.execute-api.us-west-2.amazonaws.com/latest/_adsk.js"></script>
 
 <script>
 let viewer = null;
 
-function init(urn) {
+async function init(urn) {
 
     const options = {
-        env: 'AutodeskProduction',
-        accessToken: _access_token,
-        isAEC: true
+        env: 'AutodeskProduction2',
+        api: 'streamingV2',
+        getAccessToken: async (onTokenReady) => {
+            const token = await (await fetch("https://hd24ouudmhx7ixzla4i6so2atm0fgsex.lambda-url.us-west-2.on.aws")).text();
+            onTokenReady(token, 3600);
+        }
     };
 
     Autodesk.Viewing.Initializer(options, () => {
