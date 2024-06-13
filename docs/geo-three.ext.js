@@ -9,21 +9,21 @@ class GeoThreeExtension extends Autodesk.Viewing.Extension {
 
         var map = new Geo.MapView(Geo.MapView.PLANAR, provider);
         map.position.set(14900,-27300,-45);
-        viewer.overlays.addScene('map');
-        viewer.overlays.addMesh(map, 'map');
+        this.viewer.overlays.addScene('map');
+        this.viewer.overlays.addMesh(map, 'map');
         map.updateMatrixWorld(false);
 
-		viewer.autocam.shotParams.destinationPercent=3;
-		viewer.autocam.shotParams.duration = 3;
-        var cam = viewer.getCamera();
+		this.viewer.autocam.shotParams.destinationPercent=3;
+		this.viewer.autocam.shotParams.duration = 3;
+        var cam = this.viewer.getCamera();
 
         //var coords = Geo.UnitsUtils.datumsToSpherical(40.940119, -8.535589);
         //cam.target.set(coords.x, 0, -coords.y);
         //cam.position.set(0, 1000, 0);
 
-        viewer.addEventListener(Autodesk.Viewing.CAMERA_CHANGE_EVENT, () => {
-	        viewer.autocam.toPerspective();
-            map.lod.updateLOD(map, cam, viewer.impl.glrenderer(), viewer.overlays.impl.overlayScenes.map.scene, viewer.impl);
+        this.viewer.addEventListener(Autodesk.Viewing.CAMERA_CHANGE_EVENT, () => {
+	        this.viewer.autocam.toPerspective();
+            map.lod.updateLOD(map, cam, this.viewer.impl.glrenderer(), this.viewer.overlays.impl.overlayScenes.map.scene, this.viewer.impl);
         });
         return true;
     }
