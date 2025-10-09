@@ -1,14 +1,19 @@
-three = THREE;
-
+const HEIGHT_MAGNIFY = 10.0; 
 
 class GeoThreeExtension extends Autodesk.Viewing.Extension {
     load() {
-        //var provider = new Geo.DebugProvider();
-        var DEV_BING_API_KEY = "AuViYD_FXGfc3dxc0pNa8ZEJxyZyPq1lwOLPCOydV3f0tlEVH-HKMgxZ9ilcRj-T";
-        var provider = new Geo.BingMapsProvider(DEV_BING_API_KEY, Geo.BingMapsProvider.ROAD)
-
-        var map = new Geo.MapView(Geo.MapView.PLANAR, provider);
-        map.position.set(14900,-27300,-45);
+        var MAPBOX_TOKEN = "pk.eyJ1Ijoid2FsbGFieXdheSIsImEiOiJjbDV1MHF1MzkwZXAyM2tveXZjaDVlaXJpIn0.wyOgHkuGJ37Xrx1x_49gIw";
+        
+        // Mapbox satellite imagery for color tiles
+        var provider = new Geo.MapBoxProvider(MAPBOX_TOKEN, 'mapbox/satellite-v9', Geo.MapBoxProvider.STYLE);
+        
+        // Mapbox terrain-rgb for height data
+        var heightProvider = new Geo.MapBoxProvider(MAPBOX_TOKEN, 'mapbox.terrain-rgb', Geo.MapBoxProvider.STYLE);
+        
+        // Create map with height geometry (3D terrain using geometry-based approach)
+        var map = new Geo.MapView(Geo.MapView.HEIGHT, provider, heightProvider);
+        
+        map.position.set(14900,-27300,-85);
         viewer.overlays.addScene('map');
         viewer.overlays.addMesh(map, 'map');
         map.updateMatrixWorld(false);
@@ -76,6 +81,20 @@ Autodesk.Viewing.theExtensionManager.registerExtension('GeoThreeExtension', GeoT
 	    }
 	}
 
+	class CanvasUtils {
+	    static createOffscreenCanvas(width, height) {
+	        if (typeof OffscreenCanvas !== 'undefined') {
+	            return new OffscreenCanvas(width, height);
+	        }
+	        else {
+	            let canvas = document.createElement('canvas');
+	            canvas.width = width;
+	            canvas.height = height;
+	            return canvas;
+	        }
+	    }
+	}
+
 	class MapNodeGeometry extends three.BufferGeometry {
 	    constructor(width, height, widthSegments, heightSegments) {
 	        super();
@@ -110,10 +129,73 @@ Autodesk.Viewing.theExtensionManager.registerExtension('GeoThreeExtension', GeoT
 	            }
 	        }
 
-		    this.addAttribute('index',    new three.BufferAttribute(new Uint32Array(indices),  1));
-	        this.addAttribute('position', new three.BufferAttribute(new Float32Array(vertices), 3));
-	        this.addAttribute('normal', new three.BufferAttribute(new Float32Array(normals), 3));
-	        this.addAttribute('uv', new three.BufferAttribute(new Float32Array(uvs), 2));
+	    // Use setAttribute for modern Three.js (Forge Viewer uses newer Three.js)
+        this.setIndex(new three.BufferAttribute(new Uint32Array(indices), 1));
+        this.setAttribute('position', new three.BufferAttribute(new Float32Array(vertices), 3));
+        this.setAttribute('normal', new three.BufferAttribute(new Float32Array(normals), 3));
+        this.setAttribute('uv', new three.BufferAttribute(new Float32Array(uvs), 2));
+	    }
+	}
+
+	class MapNodeHeightGeometry extends three.BufferGeometry {
+	    constructor(width, height, widthSegments, heightSegments, imageData) {
+	        super();
+	        const widthHalf = width / 2;
+	        const heightHalf = height / 2;
+	        const gridX = widthSegments + 1;
+	        const gridZ = heightSegments + 1;
+	        const segmentWidth = width / widthSegments;
+	        const segmentHeight = height / heightSegments;
+	        const indices = [];
+	        const vertices = [];
+	        const normals = [];
+	        const uvs = [];
+	        
+	        // Build plane vertices
+	        for (let iz = 0; iz < gridZ; iz++) {
+	            const z = iz * segmentHeight - heightHalf;
+	            for (let ix = 0; ix < gridX; ix++) {
+	                const x = ix * segmentWidth - widthHalf;
+	                vertices.push(x, 0, z);
+	                normals.push(0, 1, 0);
+	                uvs.push(ix / widthSegments);
+	                uvs.push(1 - iz / heightSegments);
+	            }
+	        }
+	        
+	        // Apply height data from Mapbox terrain-rgb
+	        if (imageData) {
+	            const data = imageData.data;
+	            for (let i = 0, j = 0; i < data.length && j < vertices.length; i += 4, j += 3) {
+	                const r = data[i];
+	                const g = data[i + 1];
+	                const b = data[i + 2];
+	                // Mapbox terrain-rgb decoding: height = -10000 + ((R * 256 * 256 + G * 256 + B) * 0.1)
+	                const height = (r * 65536 + g * 256 + b) * 0.1 - 10000.0;
+	                vertices[j + 1] = height * HEIGHT_MAGNIFY; // 100x exaggeration
+	            }
+	        }
+	        
+	        // Build indices
+	        for (let iz = 0; iz < heightSegments; iz++) {
+	            for (let ix = 0; ix < widthSegments; ix++) {
+	                const a = ix + gridX * iz;
+	                const b = ix + gridX * (iz + 1);
+	                const c = ix + 1 + gridX * (iz + 1);
+	                const d = ix + 1 + gridX * iz;
+	                indices.push(a, b, d);
+	                indices.push(b, c, d);
+	            }
+	        }
+
+        // Use setAttribute for modern Three.js (Forge Viewer uses newer Three.js)
+        this.setIndex(new three.BufferAttribute(new Uint32Array(indices), 1));
+        this.setAttribute('position', new three.BufferAttribute(new Float32Array(vertices), 3));
+        this.setAttribute('normal', new three.BufferAttribute(new Float32Array(normals), 3));
+        this.setAttribute('uv', new three.BufferAttribute(new Float32Array(uvs), 2));
+        
+        // Compute normals for proper lighting
+        this.computeVertexNormals();
 	    }
 	}
 
@@ -150,43 +232,48 @@ Autodesk.Viewing.theExtensionManager.registerExtension('GeoThreeExtension', GeoT
 	            this.createChildNodes();
 	        }
 	    }
-	    simplify() {
-	        if (this.children.length > 0) {
-	            this.childrenCache = this.children;
-	        }
-	        this.subdivided = false;
-	        this.isMesh = true;
-	        this.children = [];
-	    }
-	    loadTexture() {
-	        this.mapView.provider.fetchTile(this.level, this.x, this.y).then((image) => {
-	            const texture = new three.Texture(image);
-	            texture.generateMipmaps = false;
-	            texture.format = three.RGBFormat;
-	            texture.magFilter = three.LinearFilter;
-	            texture.minFilter = three.LinearFilter;
-	            texture.needsUpdate = true;
-	            this.material.map = texture;
-	            this.nodeReady();
-	        }).catch(() => {
-	        });
-	    }
-	    nodeReady() {
-	        if (this.parentNode !== null) {
-	            this.parentNode.nodesLoaded++;
-	            if (this.parentNode.nodesLoaded >= MapNode.CHILDRENS) {
-	                if (this.parentNode.subdivided === true) {
-	                    this.parentNode.isMesh = false;
-	                }
-	                for (let i = 0; i < this.parentNode.children.length; i++) {
-	                    this.parentNode.children[i].visible = true;
-	                }
-	            }
-	        }
-	        else {
-	            this.visible = true;
-	        }
-	    }
+    simplify() {
+        if (this.children.length > 0) {
+            this.childrenCache = this.children;
+        }
+        this.subdivided = false;
+        this.isMesh = true;
+        this.children = [];
+        
+        // Reset parent position when simplified
+        this.position.y = 0;
+        this.updateMatrix();
+        this.updateMatrixWorld(true);
+    }
+    loadTexture() {
+        this.mapView.provider.fetchTile(this.level, this.x, this.y).then((image) => {
+            const texture = new three.Texture(image);
+            texture.generateMipmaps = false;
+            texture.format = three.RGBFormat;
+            texture.magFilter = three.LinearFilter;
+            texture.minFilter = three.LinearFilter;
+            texture.needsUpdate = true;
+            this.material.map = texture;
+            this.nodeReady();
+        }).catch(() => {
+        });
+    }
+    nodeReady() {
+        if (this.parentNode !== null) {
+            this.parentNode.nodesLoaded++;
+            if (this.parentNode.nodesLoaded >= MapNode.CHILDRENS) {
+                if (this.parentNode.subdivided === true) {
+                    this.parentNode.isMesh = false;
+                }
+                for (let i = 0; i < this.parentNode.children.length; i++) {
+                    this.parentNode.children[i].visible = true;
+                }
+            }
+        }
+        else {
+            this.visible = true;
+        }
+    }
 	    getNeighborsDirection(direction) {
 	        return null;
 	    }
@@ -244,37 +331,43 @@ Autodesk.Viewing.theExtensionManager.registerExtension('GeoThreeExtension', GeoT
 	    initialize() {
 	        this.loadTexture();
 	    }
-	    createChildNodes() {
-	        const level = this.level + 1;
-	        const x = this.x * 2;
-	        const y = this.y * 2;
-	        let node = new MapPlaneNode(this, this.mapView, MapNode.TOP_LEFT, level, x, y);
-	        node.scale.set(0.5, 1, 0.5);
-	        node.position.set(-0.25, 2, -0.25);
-	        this.add(node);
-	        node.updateMatrix();
-	        node.updateMatrixWorld(true);
-	        node = new MapPlaneNode(this, this.mapView, MapNode.TOP_RIGHT, level, x + 1, y);
-	        node.scale.set(0.5, 1, 0.5);
-	        node.position.set(0.25, 2, -0.25);
-	        this.add(node);
-	        node.updateMatrix();
-	        node.updateMatrixWorld(true);
-	        node = new MapPlaneNode(this, this.mapView, MapNode.BOTTOM_LEFT, level, x, y + 1);
-	        node.scale.set(0.5, 1, 0.5);
-	        node.position.set(-0.25, 2, 0.25);
-	        this.add(node);
-	        node.updateMatrix();
-	        node.updateMatrixWorld(true);
-	        node = new MapPlaneNode(this, this.mapView, MapNode.BOTTOM_RIGHT, level, x + 1, y + 1);
-	        node.scale.set(0.5, 1, 0.5);
-	        node.position.set(0.25, 2, 0.25);
-	        // node.renderOrder = 20-level;
-	        // node.sortObjects = true;
-	        this.add(node);
-	        node.updateMatrix();
-	        node.updateMatrixWorld(true);
-	    }
+    createChildNodes() {
+        const level = this.level + 1;
+        const x = this.x * 2;
+        const y = this.y * 2;
+        
+        // Push parent tile downward to avoid z-fighting with children
+        this.position.y = -0.1;
+        this.updateMatrix();
+        this.updateMatrixWorld(true);
+        
+        let node = new MapPlaneNode(this, this.mapView, MapNode.TOP_LEFT, level, x, y);
+        node.scale.set(0.5, 1, 0.5);
+        node.position.set(-0.25, 0, -0.25);
+        this.add(node);
+        node.updateMatrix();
+        node.updateMatrixWorld(true);
+        node = new MapPlaneNode(this, this.mapView, MapNode.TOP_RIGHT, level, x + 1, y);
+        node.scale.set(0.5, 1, 0.5);
+        node.position.set(0.25, 0, -0.25);
+        this.add(node);
+        node.updateMatrix();
+        node.updateMatrixWorld(true);
+        node = new MapPlaneNode(this, this.mapView, MapNode.BOTTOM_LEFT, level, x, y + 1);
+        node.scale.set(0.5, 1, 0.5);
+        node.position.set(-0.25, 0, 0.25);
+        this.add(node);
+        node.updateMatrix();
+        node.updateMatrixWorld(true);
+        node = new MapPlaneNode(this, this.mapView, MapNode.BOTTOM_RIGHT, level, x + 1, y + 1);
+        node.scale.set(0.5, 1, 0.5);
+        node.position.set(0.25, 0, 0.25);
+        // node.renderOrder = 20-level;
+        // node.sortObjects = true;
+        this.add(node);
+        node.updateMatrix();
+        node.updateMatrixWorld(true);
+    }
 	    raycast(raycaster, intersects) {
 	        if (this.isMesh === true) {
 	            return super.raycast(raycaster, intersects);
@@ -285,6 +378,108 @@ Autodesk.Viewing.theExtensionManager.registerExtension('GeoThreeExtension', GeoT
 	MapPlaneNode.GEOMETRY = new MapNodeGeometry(1, 1, 1, 1);
 	MapPlaneNode.BASE_GEOMETRY = MapPlaneNode.GEOMETRY;
 	MapPlaneNode.BASE_SCALE = new three.Vector3(UnitsUtils.EARTH_PERIMETER, 1, UnitsUtils.EARTH_PERIMETER);
+
+class MapHeightNode extends MapPlaneNode {
+    constructor(parentNode = null, mapView = null, location = MapNode.ROOT, level = 7, x = 20, y = 49) {
+        super(parentNode, mapView, location, level, x, y);
+        this.heightLoaded = false;
+        this.textureLoaded = false;
+        this.geometrySize = 32; // Resolution of height geometry
+    }
+    
+    initialize() {
+        this.loadTexture();
+        if (this.mapView && this.mapView.heightProvider) {
+            this.loadHeightGeometry();
+        }
+    }
+	    
+    loadHeightGeometry() {
+        if (!this.mapView.heightProvider) {
+            return;
+        }
+        
+        this.mapView.heightProvider.fetchTile(this.level, this.x, this.y).then((image) => {
+            // Create canvas to read pixel data
+            const canvas = CanvasUtils.createOffscreenCanvas(this.geometrySize + 1, this.geometrySize + 1);
+            const context = canvas.getContext('2d');
+            context.imageSmoothingEnabled = false;
+            context.drawImage(image, 0, 0, 256, 256, 0, 0, canvas.width, canvas.height);
+            const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+            
+            // Create geometry with height data
+            this.geometry = new MapNodeHeightGeometry(1, 1, this.geometrySize, this.geometrySize, imageData);
+            this.heightLoaded = true;
+            
+            if (this.textureLoaded) {
+                this.nodeReady();
+            }
+        }).catch((error) => {
+            console.warn('Failed to load height data:', this.level, this.x, this.y, error);
+            if (this.textureLoaded) {
+                this.nodeReady();
+            }
+        });
+    }
+	    
+    loadTexture() {
+        this.mapView.provider.fetchTile(this.level, this.x, this.y).then((image) => {
+            const texture = new three.Texture(image);
+            texture.generateMipmaps = false;
+            texture.format = three.RGBFormat;
+            texture.magFilter = three.LinearFilter;
+            texture.minFilter = three.LinearFilter;
+            texture.needsUpdate = true;
+            this.material.map = texture;
+            this.textureLoaded = true;
+            
+            if (this.heightLoaded || !this.mapView.heightProvider) {
+                this.nodeReady();
+            }
+        }).catch(() => {
+            console.warn('Failed to load color tile:', this.level, this.x, this.y);
+        });
+    }
+	    
+    createChildNodes() {
+        const level = this.level + 1;
+        const x = this.x * 2;
+        const y = this.y * 2;
+        
+        // Push parent tile downward to avoid z-fighting with children
+        this.position.y = -0.1;
+        this.updateMatrix();
+        this.updateMatrixWorld(true);
+        
+        let node = new MapHeightNode(this, this.mapView, MapNode.TOP_LEFT, level, x, y);
+        node.scale.set(0.5, 1, 0.5);
+        node.position.set(-0.25, 0, -0.25);
+        this.add(node);
+        node.updateMatrix();
+        node.updateMatrixWorld(true);
+        
+        node = new MapHeightNode(this, this.mapView, MapNode.TOP_RIGHT, level, x + 1, y);
+        node.scale.set(0.5, 1, 0.5);
+        node.position.set(0.25, 0, -0.25);
+        this.add(node);
+        node.updateMatrix();
+        node.updateMatrixWorld(true);
+        
+        node = new MapHeightNode(this, this.mapView, MapNode.BOTTOM_LEFT, level, x, y + 1);
+        node.scale.set(0.5, 1, 0.5);
+        node.position.set(-0.25, 0, 0.25);
+        this.add(node);
+        node.updateMatrix();
+        node.updateMatrixWorld(true);
+        
+        node = new MapHeightNode(this, this.mapView, MapNode.BOTTOM_RIGHT, level, x + 1, y + 1);
+        node.scale.set(0.5, 1, 0.5);
+        node.position.set(0.25, 0, 0.25);
+        this.add(node);
+        node.updateMatrix();
+        node.updateMatrixWorld(true);
+    }
+	}
 
 
 	class LODRaycast {
@@ -342,6 +537,7 @@ Autodesk.Viewing.theExtensionManager.registerExtension('GeoThreeExtension', GeoT
 	        this.provider = null;
 	        this.heightProvider = null;
 	        this.root = null;
+	        this.rootMode = root; // Store the mode for setRoot
 	        // doesn't work in R71
 	        // this.onBeforeRender = (renderer, scene, camera, geometry, material, group) => {
 	        //     this.lod.updateLOD(this, camera, renderer, scene);
@@ -352,7 +548,16 @@ Autodesk.Viewing.theExtensionManager.registerExtension('GeoThreeExtension', GeoT
 	        this.setRoot(root);
 	    }
 	    setRoot(root) {
-	    	root = new MapPlaneNode(null, this);
+	        // Support different map modes
+	        if (root === MapView.PLANAR) {
+	            root = new MapPlaneNode(null, this);
+	        } else if (root === MapView.HEIGHT) {
+	            root = new MapHeightNode(null, this);
+	        } else if (typeof root === 'number') {
+	            // Default to planar for unknown modes
+	            root = new MapPlaneNode(null, this);
+	        }
+	        
 	        if (this.root !== null) {
 	            this.remove(this.root);
 	            this.root = null;
@@ -625,7 +830,12 @@ Autodesk.Viewing.theExtensionManager.registerExtension('GeoThreeExtension', GeoT
 	                reject();
 	            };
 	            image.crossOrigin = 'Anonymous';
-	            if (this.mode === MapBoxProvider.STYLE) {
+	            
+	            // Special handling for terrain-rgb tiles (raster API)
+	            if (this.style === 'mapbox.terrain-rgb' || this.mapId === 'mapbox.terrain-rgb') {
+	                image.src = MapBoxProvider.ADDRESS + 'v4/mapbox.terrain-rgb/' + zoom + '/' + x + '/' + y + (this.useHDPI ? '@2x.pngraw' : '.pngraw') + '?access_token=' + this.apiToken;
+	            }
+	            else if (this.mode === MapBoxProvider.STYLE) {
 	                image.src = MapBoxProvider.ADDRESS + 'styles/v1/' + this.style + '/tiles/' + zoom + '/' + x + '/' + y + (this.useHDPI ? '@2x?access_token=' : '?access_token=') + this.apiToken;
 	            }
 	            else {
@@ -838,14 +1048,17 @@ Autodesk.Viewing.theExtensionManager.registerExtension('GeoThreeExtension', GeoT
 
 	exports.BingMapsProvider = BingMapsProvider;
 	exports.CancelablePromise = CancelablePromise;
+	exports.CanvasUtils = CanvasUtils;
 	exports.DebugProvider = DebugProvider;
 	exports.GoogleMapsProvider = GoogleMapsProvider;
 	exports.HeightDebugProvider = HeightDebugProvider;
 	exports.HereMapsProvider = HereMapsProvider;
 	exports.LODRaycast = LODRaycast;
 	exports.MapBoxProvider = MapBoxProvider;
+	exports.MapHeightNode = MapHeightNode;
 	exports.MapNode = MapNode;
 	exports.MapNodeGeometry = MapNodeGeometry;
+	exports.MapNodeHeightGeometry = MapNodeHeightGeometry;
 	exports.MapPlaneNode = MapPlaneNode;
 	exports.MapProvider = MapProvider;
 	exports.MapTilerProvider = MapTilerProvider;
