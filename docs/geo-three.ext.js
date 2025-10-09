@@ -614,57 +614,30 @@ class MapHeightNode extends MapPlaneNode {
 	const frustum = new three.Frustum();
 	const position = new three.Vector3();
 
-	class XHRUtils {
-	    static get(url, onLoad, onError) {
-	        const xhr = new XMLHttpRequest();
-	        xhr.overrideMimeType('text/plain');
-	        xhr.open('GET', url, true);
-	        if (onLoad !== undefined) {
-	            xhr.onload = function () {
-	                onLoad(xhr.response);
-	            };
-	        }
-	        if (onError !== undefined) {
-	            xhr.onerror = onError;
-	        }
-	        xhr.send(null);
-	        return xhr;
+	class FetchUtils {
+	    static async get(url) {
+	        const response = await fetch(url);
+	        return await response.text();
 	    }
-	    static request(url, type, header, body, onLoad, onError, onProgress) {
-	        function parseResponse(response) {
-	            try {
-	                return JSON.parse(response);
-	            }
-	            catch (e) {
-	                return response;
-	            }
+	    
+	    static async request(url, type = 'GET', header = null, body = null) {
+	        const options = {
+	            method: type,
+	            headers: header || {}
+	        };
+	        
+	        if (body !== null && body !== undefined) {
+	            options.body = body;
 	        }
-	        const xhr = new XMLHttpRequest();
-	        xhr.overrideMimeType('text/plain');
-	        xhr.open(type, url, true);
-	        if (header !== null && header !== undefined) {
-	            for (const i in header) {
-	                xhr.setRequestHeader(i, header[i]);
-	            }
+	        
+	        const response = await fetch(url, options);
+	        const text = await response.text();
+	        
+	        try {
+	            return JSON.parse(text);
+	        } catch (e) {
+	            return text;
 	        }
-	        if (onLoad !== undefined) {
-	            xhr.onload = function (event) {
-	                onLoad(parseResponse(xhr.response), xhr);
-	            };
-	        }
-	        if (onError !== undefined) {
-	            xhr.onerror = onError;
-	        }
-	        if (onProgress !== undefined) {
-	            xhr.onprogress = onProgress;
-	        }
-	        if (body !== undefined) {
-	            xhr.send(body);
-	        }
-	        else {
-	            xhr.send(null);
-	        }
-	        return xhr;
 	    }
 	}
 
@@ -678,11 +651,10 @@ class MapHeightNode extends MapPlaneNode {
 	        this.apiKey = apiKey;
 	        this.type = type;
 	    }
-	    getMetaData() {
+	    async getMetaData() {
 	        const address = 'http://dev.virtualearth.net/REST/V1/Imagery/Metadata/RoadOnDemand?output=json&include=ImageryProviders&key=' + this.apiKey;
-	        XHRUtils.get(address, function (data) {
-	            JSON.parse(data);
-	        });
+	        const data = await FetchUtils.get(address);
+	        return JSON.parse(data);
 	    }
 	    static quadKey(zoom, x, y) {
 	        let quad = '';
@@ -700,15 +672,11 @@ class MapHeightNode extends MapPlaneNode {
 	        if (quad == "") return "0";
 	        return quad;
 	    }
-	    fetchTile(zoom, x, y) {
+	    async fetchTile(zoom, x, y) {
 	        return new Promise((resolve, reject) => {
 	            const image = document.createElement('img');
-	            image.onload = function () {
-	                resolve(image);
-	            };
-	            image.onerror = function () {
-	                reject();
-	            };
+	            image.onload = () => resolve(image);
+	            image.onerror = reject;
 	            image.crossOrigin = 'Anonymous';
 	            image.src = 'http://ecn.' + this.subdomain + '.tiles.virtualearth.net/tiles/' + this.type + BingMapsProvider.quadKey(zoom, x, y) + '.jpeg?g=1173';
 	        });
@@ -731,7 +699,7 @@ class MapHeightNode extends MapPlaneNode {
 	        this.apiToken = apiToken !== undefined ? apiToken : '';
 	        this.createSession();
 	    }
-	    createSession() {
+	    async createSession() {
 	        const address = 'https://www.googleapis.com/tile/v1/createSession?key=' + this.apiToken;
 	        const data = JSON.stringify({
 	            mapType: this.mapType,
@@ -741,12 +709,8 @@ class MapHeightNode extends MapPlaneNode {
 	            overlay: this.overlay,
 	            scale: 'scaleFactor1x'
 	        });
-	        XHRUtils.request(address, 'GET', { 'Content-Type': 'text/json' }, data, (response, xhr) => {
-	            console.log('Created google maps session.', response, xhr);
-	            this.sessionToken = response.session;
-	        }, function (xhr) {
-	            console.warn('Unable to create a google maps session.', xhr);
-	        });
+	        const response = await FetchUtils.request(address, 'GET', { 'Content-Type': 'text/json' }, data);
+	        this.sessionToken = response.session;
 	    }
 	    fetchTile(zoom, x, y) {
 	        return new Promise((resolve, reject) => {
@@ -809,16 +773,16 @@ class MapHeightNode extends MapPlaneNode {
 	        this.style = id;
 	        this.version = version;
 	    }
-	    getMetaData() {
+	    async getMetaData() {
 	        const address = MapBoxProvider.ADDRESS + this.version + '/' + this.mapId + '.json?access_token=' + this.apiToken;
-	        XHRUtils.get(address, (data) => {
-	            const meta = JSON.parse(data);
-	            this.name = meta.name;
-	            this.minZoom = meta.minZoom;
-	            this.maxZoom = meta.maxZoom;
-	            this.bounds = meta.bounds;
-	            this.center = meta.center;
-	        });
+	        const data = await FetchUtils.get(address);
+	        const meta = JSON.parse(data);
+	        this.name = meta.name;
+	        this.minZoom = meta.minZoom;
+	        this.maxZoom = meta.maxZoom;
+	        this.bounds = meta.bounds;
+	        this.center = meta.center;
+	        return meta;
 	    }
 	    fetchTile(zoom, x, y) {
 	        return new Promise((resolve, reject) => {
@@ -879,17 +843,17 @@ class MapHeightNode extends MapPlaneNode {
 	        this.format = format;
 	        this.theme = theme;
 	    }
-	    getMetaData() {
+	    async getMetaData() {
 	        const address = this.address + 'styles/' + this.theme + '.json';
-	        XHRUtils.get(address, (data) => {
-	            const meta = JSON.parse(data);
-	            this.name = meta.name;
-	            this.format = meta.format;
-	            this.minZoom = meta.minZoom;
-	            this.maxZoom = meta.maxZoom;
-	            this.bounds = meta.bounds;
-	            this.center = meta.center;
-	        });
+	        const data = await FetchUtils.get(address);
+	        const meta = JSON.parse(data);
+	        this.name = meta.name;
+	        this.format = meta.format;
+	        this.minZoom = meta.minZoom;
+	        this.maxZoom = meta.maxZoom;
+	        this.bounds = meta.bounds;
+	        this.center = meta.center;
+	        return meta;
 	    }
 	    fetchTile(zoom, x, y) {
 	        return new Promise((resolve, reject) => {
