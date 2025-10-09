@@ -188,9 +188,10 @@ export class MapNode extends THREE.Mesh {
         this.isMesh = true;
         this.children = [];
         if (this.material) {
-            this.material.opacity = 1;
-            this.material.transparent = false;
+            this.material.colorWrite = true;
+            this.material.depthWrite = true;
         }
+        this.renderOrder = 0;
         this.position.y = 0;
         this.updateMatrix();
         this.updateMatrixWorld(true);
@@ -215,11 +216,15 @@ export class MapNode extends THREE.Mesh {
                 if (this.parentNode.subdivided) {
                     this.parentNode.isMesh = false;
                     if (this.parentNode.material) {
-                        this.parentNode.material.opacity = 0;
-                        this.parentNode.material.transparent = true;
+                        this.parentNode.material.colorWrite = false;
+                        this.parentNode.material.depthWrite = true;
                     }
+                    this.parentNode.renderOrder = -1;
                 }
-                this.parentNode.children.forEach(child => child.visible = true);
+                this.parentNode.children.forEach(child => {
+                    child.visible = true;
+                    child.renderOrder = 0;
+                });
             }
         } else {
             this.visible = true;
@@ -242,7 +247,7 @@ export class MapPlaneNode extends MapNode {
             new THREE.MeshBasicMaterial({
                 disableEnvMap: true,
                 depthTest: true,
-                depthWrite: false,
+                depthWrite: true,
                 side: THREE.FrontSide,
                 transparent: false,
                 wireframe: false
