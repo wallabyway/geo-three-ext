@@ -1,6 +1,11 @@
 # geo-three-ext
 
+UPDATE: Now with Terrain:
+
+https://github.com/user-attachments/assets/9488c2ba-544a-4218-95fc-421350ba24e7
+
 Add maps to your Forge Viewer 3D scene, like Mapbox, Bing Maps, Google Maps, etc. Expert-level refactored with ES6 modules, modern async/await patterns, and optimized LOD system.
+
 
 Inspired by the [geo-three library](https://github.com/tentone/geo-three), optimized for 'Planar' and 'HEIGHT' modes with dynamic level-of-detail.
 
