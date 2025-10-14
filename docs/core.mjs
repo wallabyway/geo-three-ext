@@ -245,9 +245,9 @@ export class MapPlaneNode extends MapNode {
     constructor(parentNode = null, mapView = null, location = MapNode.ROOT, level = 7, x = 20, y = 49) {
         super(parentNode, mapView, location, level, x, y, MapPlaneNode.GEOMETRY, 
             new THREE.MeshBasicMaterial({
-                disableEnvMap: true,
-                depthTest: true,
-                depthWrite: true,
+                disableEnvMap: false,
+                depthTest: false,
+                depthWrite: false,
                 side: THREE.FrontSide,
                 transparent: false,
                 wireframe: false

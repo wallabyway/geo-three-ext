@@ -225,6 +225,48 @@ export class OpenMapTilesProvider extends MapProvider {
     }
 }
 
+export class ESRIMapsProvider extends MapProvider {
+    static IMAGERY = 'imagery';
+    static TOPO = 'topo';
+    static STREETS = 'streets';
+    static GRAY_CANVAS = 'gray';
+    static OCEANS = 'oceans';
+    static NATIONAL_GEOGRAPHIC = 'natgeo';
+    static TERRAIN = 'terrain';
+    static SHADED_RELIEF = 'shaded_relief';
+    
+    static BASEMAPS = {
+        imagery: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        topo: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+        streets: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+        gray: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+        oceans: 'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
+        natgeo: 'https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}',
+        terrain: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}',
+        shaded_relief: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}'
+    };
+    
+    constructor(mapType = ESRIMapsProvider.IMAGERY) {
+        super();
+        this.mapType = mapType;
+        this.maxZoom = 19;
+    }
+    
+    setMapType(mapType) {
+        if (ESRIMapsProvider.BASEMAPS[mapType]) {
+            this.mapType = mapType;
+        }
+    }
+    
+    async fetchTile(zoom, x, y) {
+        const url = ESRIMapsProvider.BASEMAPS[this.mapType]
+            .replace('{z}', zoom)
+            .replace('{y}', y)
+            .replace('{x}', x);
+        return ImageLoader.loadImage(url);
+    }
+}
+
 export class DebugProvider extends MapProvider {
     constructor() {
         super();
