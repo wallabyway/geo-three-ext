@@ -4,6 +4,10 @@ UPDATE: Now with Terrain:
 
 https://github.com/user-attachments/assets/9488c2ba-544a-4218-95fc-421350ba24e7
 
+**NEW: Polyline Measurement Tool with localStorage persistence:**
+
+![Polyline Tool](https://github.com/user-attachments/assets/5f51457d-d9df-41d2-9772-4f41c124c980)
+
 Add maps to your Forge Viewer 3D scene, like ESRI ArcGIS, Mapbox, Bing Maps, Google Maps, and more. Expert-level refactored with ES6 modules, modern async/await patterns, and optimized LOD system. **Now defaults to ESRI basemaps (no API key required!)**
 
 
