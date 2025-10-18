@@ -1,9 +1,8 @@
 import { MapView, LODRaycast } from './render.mjs';
-import { ESRIMapsProvider, MapBoxProvider } from './loader.mjs';
-import { HEIGHT_MAGNIFY } from './core.mjs';
+import { ESRIMapsProvider, MapBoxProvider } from './providers.mjs';
 
-export * from './loader.mjs';
-export * from './core.mjs';
+export * from './utils.mjs';
+export * from './providers.mjs';
 export * from './render.mjs';
 
 export class GeoThreeExtension extends Autodesk.Viewing.Extension {
@@ -11,9 +10,11 @@ export class GeoThreeExtension extends Autodesk.Viewing.Extension {
         super(viewer, options);
         this.map = null;
         this.lodUpdateInterval = null;
-        this.updateFrequency = 60; // Very fast updates for debugging
+        this.updateFrequency = 120; // Very fast updates for debugging
         this.raycaster = new THREE.Raycaster();
-        this.onMapClick = this.onMapClick.bind(this);
+        this.mousePosition = { x: 0, y: 0 };
+        this.onMouseMove = this.onMouseMove.bind(this);
+        this.onMouseWheel = this.onMouseWheel.bind(this);
     }
     
     load() {
@@ -50,23 +51,39 @@ export class GeoThreeExtension extends Autodesk.Viewing.Extension {
         // Use interval-based updates for continuous raycasting LOD
         this.lodUpdateInterval = setInterval(updateLOD, this.updateFrequency);
         
-        // Add click handler for terrain pivot setting
-        this.viewer.canvas.addEventListener('click', this.onMapClick);
+        // Add mouse move handler to track mouse position
+        this.viewer.canvas.addEventListener('mousemove', this.onMouseMove);
+        
+        // Add wheel handler for automatic pivot setting on zoom
+        this.viewer.canvas.addEventListener('wheel', this.onMouseWheel, { passive: true });
         
         return true;
     }
     
-    onMapClick(event) {
-        // Get canvas position accounting for navbar and other UI elements
+    onMouseMove(event) {
+        // Track mouse position for wheel zoom pivot
         const rect = this.viewer.canvas.getBoundingClientRect();
-        
-        // Calculate click position relative to canvas (not viewport)
-        const canvasX = event.clientX - rect.left;
-        const canvasY = event.clientY - rect.top;
+        this.mousePosition.x = event.clientX - rect.left;
+        this.mousePosition.y = event.clientY - rect.top;
+    }
+    
+    onMouseWheel(event) {
+        // Set pivot point at mouse position when zooming
+        this.setPivotAtMousePosition(this.mousePosition.x, this.mousePosition.y);
+    }
+    
+    setPivotAtMousePosition(canvasX, canvasY) {
+        // Don't process if tools are active
+        const activeTool = this.viewer.toolController.getActiveTool();
+        if (activeTool && activeTool.getName && activeTool.getName().startsWith('Edit2D')) {
+            return;
+        }
         
         // Use Forge's utilities with corrected coordinates
         const pointerVector = this.viewer.impl.clientToViewport(canvasX, canvasY);
         const ray = this.viewer.impl.viewportToRay(pointerVector);
+        
+        if (!ray) return;
         
         // Set raycaster ray manually
         this.raycaster.ray.origin.copy(ray.origin);
@@ -78,13 +95,15 @@ export class GeoThreeExtension extends Autodesk.Viewing.Extension {
         if (intersects.length > 0) {
             const point = intersects[0].point;            
             this.viewer.navigation.setPivotPoint(point);
+            this.viewer.navigation.setPivotSetFlag(true);
         }
     }
     
     unload() {
-        // Remove click handler
+        // Remove event handlers
         if (this.viewer.canvas) {
-            this.viewer.canvas.removeEventListener('click', this.onMapClick);
+            this.viewer.canvas.removeEventListener('mousemove', this.onMouseMove);
+            this.viewer.canvas.removeEventListener('wheel', this.onMouseWheel);
         }
         
         if (this.lodUpdateInterval) {

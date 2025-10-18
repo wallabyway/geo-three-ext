@@ -1,27 +1,4 @@
-export class FetchUtils {
-    static async get(url) {
-        return (await fetch(url)).text();
-    }
-    
-    static async request(url, { method = 'GET', headers = {}, body = null } = {}) {
-        const options = { method, headers };
-        if (body) options.body = body;
-        const text = await (await fetch(url, options)).text();
-        try { return JSON.parse(text); } catch { return text; }
-    }
-}
-
-export class ImageLoader {
-    static loadImage(url, crossOrigin = 'Anonymous') {
-        return new Promise((resolve, reject) => {
-            const img = new Image();
-            img.crossOrigin = crossOrigin;
-            img.onload = () => resolve(img);
-            img.onerror = reject;
-            img.src = url;
-        });
-    }
-}
+import { FetchUtils, ImageLoader } from './utils.mjs';
 
 export class MapProvider {
     constructor() {
@@ -33,6 +10,48 @@ export class MapProvider {
     }
     async fetchTile(zoom, x, y) {}
     async getMetaData() {}
+}
+
+export class ESRIMapsProvider extends MapProvider {
+    static IMAGERY = 'imagery';
+    static TOPO = 'topo';
+    static STREETS = 'streets';
+    static GRAY_CANVAS = 'gray';
+    static OCEANS = 'oceans';
+    static NATIONAL_GEOGRAPHIC = 'natgeo';
+    static TERRAIN = 'terrain';
+    static SHADED_RELIEF = 'shaded_relief';
+    
+    static BASEMAPS = {
+        imagery: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        topo: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+        streets: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+        gray: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+        oceans: 'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
+        natgeo: 'https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}',
+        terrain: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}',
+        shaded_relief: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}'
+    };
+    
+    constructor(mapType = ESRIMapsProvider.IMAGERY) {
+        super();
+        this.mapType = mapType;
+        this.maxZoom = 19;
+    }
+    
+    setMapType(mapType) {
+        if (ESRIMapsProvider.BASEMAPS[mapType]) {
+            this.mapType = mapType;
+        }
+    }
+    
+    async fetchTile(zoom, x, y) {
+        const url = ESRIMapsProvider.BASEMAPS[this.mapType]
+            .replace('{z}', zoom)
+            .replace('{y}', y)
+            .replace('{x}', x);
+        return ImageLoader.loadImage(url);
+    }
 }
 
 export class OpenStreetMapsProvider extends MapProvider {
@@ -222,48 +241,6 @@ export class OpenMapTilesProvider extends MapProvider {
     
     async fetchTile(zoom, x, y) {
         return ImageLoader.loadImage(`${this.address}styles/${this.theme}/${zoom}/${x}/${y}.${this.format}`);
-    }
-}
-
-export class ESRIMapsProvider extends MapProvider {
-    static IMAGERY = 'imagery';
-    static TOPO = 'topo';
-    static STREETS = 'streets';
-    static GRAY_CANVAS = 'gray';
-    static OCEANS = 'oceans';
-    static NATIONAL_GEOGRAPHIC = 'natgeo';
-    static TERRAIN = 'terrain';
-    static SHADED_RELIEF = 'shaded_relief';
-    
-    static BASEMAPS = {
-        imagery: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        topo: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
-        streets: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
-        gray: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
-        oceans: 'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
-        natgeo: 'https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}',
-        terrain: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}',
-        shaded_relief: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}'
-    };
-    
-    constructor(mapType = ESRIMapsProvider.IMAGERY) {
-        super();
-        this.mapType = mapType;
-        this.maxZoom = 19;
-    }
-    
-    setMapType(mapType) {
-        if (ESRIMapsProvider.BASEMAPS[mapType]) {
-            this.mapType = mapType;
-        }
-    }
-    
-    async fetchTile(zoom, x, y) {
-        const url = ESRIMapsProvider.BASEMAPS[this.mapType]
-            .replace('{z}', zoom)
-            .replace('{y}', y)
-            .replace('{x}', x);
-        return ImageLoader.loadImage(url);
     }
 }
 

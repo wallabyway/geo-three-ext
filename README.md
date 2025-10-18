@@ -19,9 +19,9 @@ Inspired by the [geo-three library](https://github.com/tentone/geo-three), optim
 ```
 docs/
 ├── geo-three.ext.js    # Main extension entry point
-├── loader.mjs          # Tile providers & async loading
-├── core.mjs            # Map nodes, geometries & utilities
-└── render.mjs          # LOD system & rendering
+├── utils.mjs           # Utility classes (FetchUtils, ImageLoader, CanvasUtils, UnitsUtils)
+├── providers.mjs       # Tile providers & async loading
+└── render.mjs          # Map nodes, geometries, LOD system & rendering
 ```
 
 ## 🚀 GETTING STARTED
@@ -73,7 +73,7 @@ map.position.set(14900, -27300, -85);
 
 ### Change Starting Location
 
-Modify the root node coordinates (in `core.mjs`):
+Modify the root node coordinates (in `render.mjs`):
 
 ```javascript
 // San Francisco: level = 7, x = 20, y = 49
@@ -85,7 +85,7 @@ new MapHeightNode(null, this, MapNode.ROOT, level = 7, x = 20, y = 49);
 For true Earth scale rendering:
 
 ```javascript
-import { UnitsUtils } from './core.mjs';
+import { UnitsUtils } from './utils.mjs';
 
 // Set Earth radius
 UnitsUtils.EARTH_RADIUS = 6378137;
@@ -115,10 +115,10 @@ Higher `thresholdDown` values make tiles disappear faster when zooming out. Lowe
 
 ### Triangle Edge Outlines
 
-To visualize the triangle mesh structure, you can enable edge outlines in `core.mjs`:
+To visualize the triangle mesh structure, you can enable edge outlines in `render.mjs`:
 
 ```javascript
-import { MapPlaneNode } from './core.mjs';
+import { MapPlaneNode } from './render.mjs';
 
 // Enable triangle edge outlines globally
 MapPlaneNode.SHOW_EDGES = true;
@@ -150,7 +150,7 @@ import {
     HereMapsProvider,
     OpenStreetMapsProvider,
     MapTilerProvider
-} from './loader.mjs';
+} from './providers.mjs';
 
 // Mapbox
 const provider = new MapBoxProvider(token, 'mapbox/satellite-v9', MapBoxProvider.STYLE);
@@ -210,9 +210,9 @@ setBasemap(ESRIMapsProvider.TOPO);
 
 ### Module Responsibilities
 
-- **`loader.mjs`** - Async tile fetching, image loading, all map providers
-- **`core.mjs`** - Quadtree nodes, terrain geometry, coordinate utilities
-- **`render.mjs`** - LOD raycasting system, MapView container
+- **`utils.mjs`** - Utility classes: FetchUtils, ImageLoader, CanvasUtils, UnitsUtils
+- **`providers.mjs`** - Async tile fetching, all map providers
+- **`render.mjs`** - Quadtree nodes, terrain geometry, LOD raycasting system, MapView container
 
 ### Performance Features
 
