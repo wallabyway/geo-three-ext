@@ -25,7 +25,6 @@
             <div class="container">
                 <ul class="navbar-list">
                     <li class="navbar-item"><img class="navbar-button navbar-img" src="https://wallabyway.github.io/floor-animation/logo.png"/></li>
-                    <li class="navbar-item"><button onClick="alert('ES6 Modules Loaded!')" class="navbar-button button-primary">Test</button></li>
                     <li class="navbar-item"><button id="homeButton" class="navbar-button button-primary">Home</button></li>
                     <li class="navbar-itemr mobile"><a class="navbar-button button" href="https://github.com/wallabyway/geo-three-ext">Github</a></li>
                 </ul>
@@ -40,26 +39,29 @@
 
 <script type="module">
 import './geo-three.ext.js';
+import './polyline-tool.js';
 
 let viewer = null;
 
 async function initViewer(urn) {
+    const token = await (await fetch("https://hd24ouudmhx7ixzla4i6so2atm0fgsex.lambda-url.us-west-2.on.aws")).text();
     const options = {
         env: 'AutodeskProduction2',
         api: 'streamingV2',
-        getAccessToken: async (onTokenReady) => {
-            const token = await (await fetch("https://hd24ouudmhx7ixzla4i6so2atm0fgsex.lambda-url.us-west-2.on.aws")).text();
-            onTokenReady(token, 3600);
-        }
+        accessToken: token
     };
 
     Autodesk.Viewing.Initializer(options, () => {
         const div = document.getElementById('viewer');
-        const config = { extensions: ["GeoThreeExtension"] };
+        const config = { extensions: ["GeoThreeExtension", "PolylineToolExtension"] };
 
         viewer = new Autodesk.Viewing.Private.GuiViewer3D(div, config);
         viewer.start();
         viewer.setTheme("light-theme");
+        
+        document.getElementById('homeButton').addEventListener('click', () => {
+            if (viewer) viewer.navigation.setRequestHomeView(true);
+        });
         
         Autodesk.Viewing.Document.load(`urn:${urn}`, (doc) => {
             const viewables = doc.getRoot().search({role:'3d', type: "geometry"})[1];
@@ -69,6 +71,7 @@ async function initViewer(urn) {
 }
 
 window.init = initViewer;
+window.viewer = viewer;
 </script>
 
 </html>
