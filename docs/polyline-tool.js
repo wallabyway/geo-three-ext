@@ -44,6 +44,20 @@ export class PolylineMeasureTool extends Autodesk.Viewing.ToolInterface {
                 this.viewer.overlays.addScene(this.overlayName);
             }
             
+            // Create label container if it doesn't exist
+            if (!this.labelContainer) {
+                this.labelContainer = document.createElement('div');
+                this.labelContainer.id = 'polyline-label-container';
+                this.labelContainer.style.position = 'absolute';
+                this.labelContainer.style.top = '0';
+                this.labelContainer.style.left = '0';
+                this.labelContainer.style.width = '100%';
+                this.labelContainer.style.height = '100%';
+                this.labelContainer.style.pointerEvents = 'none';
+                this.labelContainer.style.zIndex = '999';
+                this.viewer.container.appendChild(this.labelContainer);
+            }
+            
             this.active = true;
             this.viewer.canvas.style.cursor = POLYLINE_CURSOR;
             
@@ -223,9 +237,7 @@ export class PolylineMeasureTool extends Autodesk.Viewing.ToolInterface {
     
     _createLabel(p1, p2, distance) {
         const label = document.createElement('div');
-        label.className = 'measure-length';
-        label.style.position = 'absolute';
-        label.style.pointerEvents = 'none';
+        label.className = 'measure-length visible'; // Add 'visible' class to show the label
         
         const text = document.createElement('div');
         text.className = 'measure-length-text';
@@ -239,7 +251,12 @@ export class PolylineMeasureTool extends Autodesk.Viewing.ToolInterface {
             midpoint: new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5)
         };
         
-        this.viewer.container.appendChild(label);
+        // Append to label container instead of viewer container
+        if (this.labelContainer) {
+            this.labelContainer.appendChild(label);
+        } else {
+            this.viewer.container.appendChild(label);
+        }
         this.labels.push(label);
         
         // Update position after DOM has calculated dimensions
