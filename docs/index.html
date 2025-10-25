@@ -7,8 +7,8 @@
     <link rel="icon" href="data:,">
     
     <!-- Preload critical Forge Viewer resources for faster loading -->
-    <link rel="preload" href="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.113.0/viewer3D.js" as="script" crossorigin="anonymous">
-    <link rel="preload" href="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.113.0/style.css" as="style">
+    <link href="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.113.0/viewer3D.js">
+    <link href="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.113.0/style.css">
     
     <link rel="stylesheet" href="https://wallabyway.github.io/floor-animation/skeleton.min.css">
     <title>(Forge) Geo-Three Extension - ES6 Modules</title>
@@ -16,6 +16,15 @@
         body { margin: 0; overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
         .navbar { flex-shrink: 0; }
         #viewer { flex: 1; position: relative; }
+        
+        /* Active button state - Forge Viewer doesn't provide this by default */
+        .adsk-viewing-viewer .adsk-button.active {
+            background-color: #0696D7 !important;
+            border-color: #0696D7 !important;
+        }
+        .adsk-viewing-viewer .adsk-button.active .adsk-button-icon {
+            color: white !important;
+        }
     </style>
 </head>
 
@@ -39,7 +48,7 @@
 
 <script type="module">
 import './geo-three.ext.js';
-import './polyline-tool.js';
+import './polyline-ext.mjs';
 
 let viewer = null;
 
@@ -51,9 +60,11 @@ async function initViewer(urn) {
         accessToken: token
     };
 
-    Autodesk.Viewing.Initializer(options, () => {
+    Autodesk.Viewing.Initializer(options, async () => {
         const div = document.getElementById('viewer');
-        const config = { extensions: ["GeoThreeExtension", "PolylineToolExtension"] };
+        const config = {
+            extensions: ['PolylineToolExtension', 'GeoThreeExtension']
+        };
 
         viewer = new Autodesk.Viewing.Private.GuiViewer3D(div, config);
         viewer.start();
@@ -63,9 +74,9 @@ async function initViewer(urn) {
             if (viewer) viewer.navigation.setRequestHomeView(true);
         });
         
-        Autodesk.Viewing.Document.load(`urn:${urn}`, (doc) => {
+        Autodesk.Viewing.Document.load(`urn:${urn}`, async (doc) => {
             const viewables = doc.getRoot().search({role:'3d', type: "geometry"})[1];
-            viewer.loadDocumentNode(doc, viewables);
+            await viewer.loadDocumentNode(doc, viewables);
         });
     });
 }
