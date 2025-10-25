@@ -37,12 +37,43 @@ export class ESRIMapsProvider extends MapProvider {
         super();
         this.mapType = mapType;
         this.maxZoom = 19;
+        this.copyrightCache = null;
     }
     
     setMapType(mapType) {
         if (ESRIMapsProvider.BASEMAPS[mapType]) {
             this.mapType = mapType;
         }
+    }
+    
+    async getAttributionText() {
+        // Return cached copyright if already fetched
+        if (this.copyrightCache) {
+            return this.copyrightCache;
+        }
+        
+        try {
+            const url = 'https://basemaps3d.arcgis.com/arcgis/rest/services/Esri3D_Buildings_v1/SceneServer/layers/0?f=json';
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            if (data.copyrightText) {
+                // Trim to 100 characters max
+                let copyright = data.copyrightText;
+                if (copyright.length > 100) {
+                    copyright = copyright.substring(0, 97) + '...';
+                }
+                this.copyrightCache = copyright;
+                return copyright;
+            }
+        } catch (error) {
+            console.warn('Failed to fetch Esri copyright text:', error);
+        }
+        
+        // Fallback copyright text
+        const fallback = '© Esri and its licensors. All rights reserved.';
+        this.copyrightCache = fallback;
+        return fallback;
     }
     
     async fetchTile(zoom, x, y) {
