@@ -1,5 +1,5 @@
-// Simple crosshair/target cursor
-const POLYLINE_CURSOR = "crosshair";
+// Custom large 'X' target cursor using SVG
+const POLYLINE_CURSOR = `url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="15" fill="none" stroke="black" stroke-width="2"/><circle cx="16" cy="16" r="14" fill="none" stroke="white" stroke-width="1"/><line x1="6" y1="6" x2="26" y2="26" stroke="black" stroke-width="2.5"/><line x1="6" y1="6" x2="26" y2="26" stroke="white" stroke-width="1.5"/><line x1="26" y1="6" x2="6" y2="26" stroke="black" stroke-width="2.5"/><line x1="26" y1="6" x2="6" y2="26" stroke="white" stroke-width="1.5"/><circle cx="16" cy="16" r="2" fill="white" stroke="black" stroke-width="1"/></svg>') 16 16, crosshair`;
 
 const POLYLINE_COLOR = 0x125CCC; // Pre-calculated gamma corrected from 0x4499E4
 
@@ -18,6 +18,7 @@ export class PolylineMeasureTool extends Autodesk.Viewing.ToolInterface {
         this.overlayName = 'polyline-measure-overlay';
         this.storageKey = 'polyline-tool-data';
         this.polylines = []; // Array of completed polylines
+        this.isDataLoaded = false; // Track if storage data has been loaded
         
         delete this.register;
         delete this.deregister;
@@ -48,6 +49,7 @@ export class PolylineMeasureTool extends Autodesk.Viewing.ToolInterface {
             if (!this.labelContainer) {
                 this.labelContainer = document.createElement('div');
                 this.labelContainer.id = 'polyline-label-container';
+                this.labelContainer.classList.add('property-panel'); 
                 this.labelContainer.style.position = 'absolute';
                 this.labelContainer.style.top = '0';
                 this.labelContainer.style.left = '0';
@@ -58,6 +60,11 @@ export class PolylineMeasureTool extends Autodesk.Viewing.ToolInterface {
                 this.viewer.container.appendChild(this.labelContainer);
             }
             
+            // Show labels when tool is active
+            if (this.labelContainer) {
+                this.labelContainer.style.display = 'block';
+            }
+            
             this.active = true;
             this.viewer.canvas.style.cursor = POLYLINE_CURSOR;
             
@@ -65,8 +72,15 @@ export class PolylineMeasureTool extends Autodesk.Viewing.ToolInterface {
             this._onCameraChange = this._onCameraChange.bind(this);
             this.viewer.addEventListener(Autodesk.Viewing.CAMERA_CHANGE_EVENT, this._onCameraChange);
             
-            // Load and restore saved polylines
-            this._loadFromStorage();
+            // Add keyboard event listener for Escape key to finish drawing
+            this._onKeyDown = this._onKeyDown.bind(this);
+            document.addEventListener('keydown', this._onKeyDown);
+            
+            // Load and restore saved polylines (only once)
+            if (!this.isDataLoaded) {
+                this._loadFromStorage();
+                this.isDataLoaded = true;
+            }
         }
     }
     
@@ -74,6 +88,11 @@ export class PolylineMeasureTool extends Autodesk.Viewing.ToolInterface {
         if (this.active) {
             // Remove any preview line
             this._removePreview();
+            
+            // Hide labels when tool is inactive
+            if (this.labelContainer) {
+                this.labelContainer.style.display = 'none';
+            }
             
             // Keep the overlay scene and drawings, just deactivate interaction
             this.active = false;
@@ -83,12 +102,26 @@ export class PolylineMeasureTool extends Autodesk.Viewing.ToolInterface {
             if (this._onCameraChange) {
                 this.viewer.removeEventListener(Autodesk.Viewing.CAMERA_CHANGE_EVENT, this._onCameraChange);
             }
+            
+            // Remove keyboard event listener
+            if (this._onKeyDown) {
+                document.removeEventListener('keydown', this._onKeyDown);
+            }
         }
     }
     
     _onCameraChange() {
         this._updateLineScales();
         this._updateLabelPositions();
+    }
+    
+    _onKeyDown(event) {
+        // Finish drawing on Escape key
+        if (event.key === 'Escape' && this.active && this.points.length > 1) {
+            this._finish();
+            event.preventDefault();
+            event.stopPropagation();
+        }
     }
     
     getPriority() {
@@ -138,12 +171,8 @@ export class PolylineMeasureTool extends Autodesk.Viewing.ToolInterface {
     }
     
     handleDoubleClick(event, button) {
-        if (!this.active || button !== 0) return false;
-        
-        if (this.points.length > 1) {
-            this._finish();
-            return true;
-        }
+        // Double-click no longer finishes the polyline (use Escape key instead)
+        // Just return false to allow the event to be handled by other tools
         return false;
     }
     
@@ -168,7 +197,7 @@ export class PolylineMeasureTool extends Autodesk.Viewing.ToolInterface {
         this._removePreview();
         
         const lastPoint = this.points[this.points.length - 1];
-        const previewLine = this._createLine(lastPoint, point, POLYLINE_COLOR, 3, true);
+        const previewLine = this._createLine(lastPoint, point, POLYLINE_COLOR, 0.6, true);
         this.viewer.overlays.addMesh(previewLine, this.overlayName);
         this.previewLine = previewLine;
         
@@ -229,7 +258,7 @@ export class PolylineMeasureTool extends Autodesk.Viewing.ToolInterface {
     }
     
     _drawLine(start, end) {
-        const line = this._createLine(start, end, POLYLINE_COLOR, 4);
+        const line = this._createLine(start, end, POLYLINE_COLOR, 0.8);
         this.lines.push(line);
         this.viewer.overlays.addMesh(line, this.overlayName);
         this.viewer.impl.invalidate(true);
@@ -241,7 +270,16 @@ export class PolylineMeasureTool extends Autodesk.Viewing.ToolInterface {
         
         const text = document.createElement('div');
         text.className = 'measure-length-text';
-        text.textContent = `${(distance / 1000).toFixed(2)} m`; // Convert mm to m
+        // Scale factor for terrain coordinate system: empirically determined as ~134.29
+        // This converts from terrain units to real-world meters
+        const distanceInMeters = distance * 0.13429 * 2;
+        
+        // Display in km if >= 1000m, otherwise in meters
+        if (distanceInMeters >= 1000) {
+            text.textContent = `${(distanceInMeters / 1000).toFixed(2)} km`;
+        } else {
+            text.textContent = `${distanceInMeters.toFixed(2)} m`;
+        }
         label.appendChild(text);
         
         // Store the midpoint for positioning
@@ -289,8 +327,8 @@ export class PolylineMeasureTool extends Autodesk.Viewing.ToolInterface {
     }
     
     _createLine(start, end, color, linewidth, dashed = false) {
-        // Create cylinder mesh following measure tool pattern
-        const cylinderGeometry = new THREE.CylinderGeometry(0.1, 0.1, 1, 8, 1, true);
+        // Create box geometry (rectangle shape - fewer triangles than cylinder)
+        const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
         
         const direction = new THREE.Vector3().subVectors(end, start);
         const orientation = new THREE.Matrix4();
@@ -308,7 +346,7 @@ export class PolylineMeasureTool extends Autodesk.Viewing.ToolInterface {
             depthWrite: false
         });
         
-        const mesh = new THREE.Mesh(cylinderGeometry, material);
+        const mesh = new THREE.Mesh(boxGeometry, material);
         mesh.applyMatrix4(orientation);
         mesh.lmv_line_width = linewidth;
         mesh.position.x = (end.x + start.x) / 2;
@@ -406,11 +444,50 @@ export class PolylineMeasureTool extends Autodesk.Viewing.ToolInterface {
     _finish() {
         this._removePreview();
         
-        // Save completed polyline
+        // Check for duplicate last point (zero-length segment)
         if (this.points.length > 1) {
+            const lastPoint = this.points[this.points.length - 1];
+            const prevPoint = this.points[this.points.length - 2];
+            const distance = lastPoint.distanceTo(prevPoint);
+            
+            if (distance < 0.001) { // Nearly zero distance
+                // Remove the duplicate point
+                this.points.pop();
+                
+                // Remove the last line and label
+                if (this.lines.length > 0) {
+                    const lastLine = this.lines.pop();
+                    this.viewer.overlays.removeMesh(lastLine, this.overlayName);
+                }
+                
+                if (this.labels.length > 0) {
+                    const lastLabel = this.labels.pop();
+                    if (lastLabel.parentNode) {
+                        lastLabel.parentNode.removeChild(lastLabel);
+                    }
+                }
+                
+                // Remove the last point markers (outer and inner circle)
+                if (this.pointMarkers.length >= 2) {
+                    const innerMarker = this.pointMarkers.pop();
+                    const outerMarker = this.pointMarkers.pop();
+                    this.viewer.overlays.removeMesh(innerMarker, this.overlayName);
+                    this.viewer.overlays.removeMesh(outerMarker, this.overlayName);
+                }
+            }
+        }
+        
+        // Save completed polyline with tile location for accurate coordinate export
+        // Points are stored in world space for 3D rendering
+        // They will be converted to lat/lng during export using the stored tile location
+        if (this.points.length > 1) {
+            const geoExt = this.viewer.getExtension('GeoThreeExtension');
+            const tileLocation = geoExt ? geoExt.getTileLocation() : null;
+            
             this.polylines.push({
                 points: this.points.map(p => ({ x: p.x, y: p.y, z: p.z })),
-                totalDistance: this.totalDistance
+                totalDistance: this.totalDistance,
+                tileLocation: tileLocation
             });
             this._saveToStorage();
         }
@@ -530,152 +607,4 @@ export class PolylineMeasureTool extends Autodesk.Viewing.ToolInterface {
         }
     }
 }
-
-export class PolylineToolExtension extends Autodesk.Viewing.Extension {
-    constructor(viewer, options) {
-        super(viewer, options);
-        this.tool = null;
-        this.snapper = null;
-        this.toolbarGroup = null;
-        this.raycaster = new THREE.Raycaster();
-    }
-    
-    async load() {
-        try {
-            await this.viewer.loadExtension('Autodesk.Snapping');
-            
-            const SnapperClass = Autodesk.Viewing.Extensions.Snapping.Snapper;
-            this.snapper = new SnapperClass(this.viewer, { 
-                renderSnappedGeometry: true, 
-                renderSnappedTopology: true
-            });
-            
-            this.viewer.toolController.registerTool(this.snapper);
-            this.viewer.toolController.activateTool(this.snapper.getName());
-            
-            this.tool = new PolylineMeasureTool(this.viewer, this.snapper);
-            this.viewer.toolController.registerTool(this.tool);
-            
-            if (this.viewer.toolbar) {
-                this.createToolbar();
-            } else {
-                this.onToolbarCreated = this.onToolbarCreated.bind(this);
-                this.viewer.addEventListener(Autodesk.Viewing.TOOLBAR_CREATED_EVENT, this.onToolbarCreated);
-            }
-            
-            return true;
-        } catch (error) {
-            console.error('PolylineToolExtension: Load failed', error);
-            return false;
-        }
-    }
-    
-    onToolbarCreated() {
-        this.createToolbar();
-        this.viewer.removeEventListener(Autodesk.Viewing.TOOLBAR_CREATED_EVENT, this.onToolbarCreated);
-    }
-    
-    raycastTerrain(canvasX, canvasY) {
-        const geoExt = this.viewer.getExtension('GeoThreeExtension');
-        if (!geoExt || !geoExt.map) return null;
-        
-        const vpVec = this.viewer.impl.clientToViewport(canvasX, canvasY);
-        const ray = this.viewer.impl.viewportToRay(vpVec);
-        if (!ray) return null;
-        
-        this.raycaster.ray.origin.copy(ray.origin);
-        this.raycaster.ray.direction.copy(ray.direction);
-        
-        const intersects = this.raycaster.intersectObject(geoExt.map, true);
-        return intersects.length > 0 ? intersects[0].point : null;
-    }
-    
-    createToolbar() {
-        if (!this.viewer.toolbar) return;
-        
-        const avu = Autodesk.Viewing.UI;
-        const self = this;
-        
-        // Create toggle button
-        this.toggleButton = new avu.Button('polyline-toggle-button');
-        this.toggleButton.setToolTip('Polyline Tool');
-        this.toggleButton.setIcon("adsk-icon-measure-area-new");
-        this.toggleButton.setState(avu.Button.State.INACTIVE);
-        
-        this.toggleButton.onClick = (e) => {
-            const state = this.toggleButton.getState();
-            if (state === avu.Button.State.INACTIVE) {
-                this.activatePolylineTool();
-            } else {
-                this.deactivatePolylineTool();
-            }
-        };
-        
-        // Create clear/trash button
-        this.clearButton = new avu.Button('polyline-clear-button');
-        this.clearButton.setToolTip('Clear All Polylines');
-        this.clearButton.setIcon("adsk-icon-measure-trash");
-        
-        this.clearButton.onClick = (e) => {
-            if (this.tool) {
-                this.tool.clearAll();
-            }
-        };
-        
-        // Create control group
-        this.subToolbar = new avu.ControlGroup('PolylineToolbar');
-        this.subToolbar.addControl(this.toggleButton);
-        this.subToolbar.addControl(this.clearButton);
-        
-        // Add to main toolbar
-        this.viewer.toolbar.addControl(this.subToolbar);
-    }
-    
-    unload() {
-        if (this.onToolbarCreated) {
-            this.viewer.removeEventListener(Autodesk.Viewing.TOOLBAR_CREATED_EVENT, this.onToolbarCreated);
-        }
-        
-        if (this.subToolbar && this.viewer.toolbar) {
-            this.viewer.toolbar.removeControl(this.subToolbar);
-            this.subToolbar = null;
-        }
-        
-        if (this.tool) {
-            this.deactivatePolylineTool();
-            this.viewer.toolController.deregisterTool(this.tool);
-            this.tool = null;
-        }
-        
-        if (this.snapper) {
-            this.viewer.toolController.deactivateTool(this.snapper.getName());
-            this.viewer.toolController.deregisterTool(this.snapper);
-            this.snapper = null;
-        }
-        
-        return true;
-    }
-    
-    activatePolylineTool() {
-        if (this.tool) {
-            this.viewer.toolController.activateTool(this.tool.getName());
-            if (this.toggleButton) {
-                const avu = Autodesk.Viewing.UI;
-                this.toggleButton.setState(avu.Button.State.ACTIVE);
-            }
-        }
-    }
-    
-    deactivatePolylineTool() {
-        if (this.tool) {
-            this.viewer.toolController.deactivateTool(this.tool.getName());
-            if (this.toggleButton) {
-                const avu = Autodesk.Viewing.UI;
-                this.toggleButton.setState(avu.Button.State.INACTIVE);
-            }
-        }
-    }
-}
-
-Autodesk.Viewing.theExtensionManager.registerExtension('PolylineToolExtension', PolylineToolExtension);
 
