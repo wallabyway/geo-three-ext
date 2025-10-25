@@ -69,13 +69,14 @@ export class MapView extends THREE.Mesh {
     static HEIGHT = 202;
     static HEIGHT_SHADER = 203;
     
-    constructor(rootMode = MapView.PLANAR, provider = null, heightProvider = null) {
+    constructor(rootMode = MapView.PLANAR, provider = null, heightProvider = null, { level = 7, x = 20, y = 49 } = {}) {
         super(undefined, undefined);
         this.lod = new LODRaycast();
         this.provider = provider;
         this.heightProvider = heightProvider;
         this.root = null;
         this.rootMode = rootMode;
+        this.rootLocation = { level, x, y };
         this.setRoot(rootMode);
     }
     
@@ -88,7 +89,8 @@ export class MapView extends THREE.Mesh {
         this.root = root;
         if (this.root) {
             this.rotateX(Math.PI / 2);
-            this.geometry = this.root.constructor.BASE_GEOMETRY;
+            // Don't set geometry on MapView - it should just be a container, not render its own mesh
+            // this.geometry = this.root.constructor.BASE_GEOMETRY;
             this.scale.copy(this.root.constructor.BASE_SCALE);
             this.root.mapView = this;
             this.add(this.root);
@@ -264,10 +266,8 @@ export class MapNode extends THREE.Mesh {
         this.subdivided = false;
         this.isMesh = true;
         this.children = [];
-        if (this.material) {
-            this.material.colorWrite = true;
-            this.material.depthWrite = true;
-        }
+        this.nodesLoaded = 0;
+        this.visible = true;
         this.renderOrder = 0;
         this.position.y = 0;
         this.updateMatrix();
@@ -290,18 +290,16 @@ export class MapNode extends THREE.Mesh {
         if (this.parentNode) {
             this.parentNode.nodesLoaded++;
             if (this.parentNode.nodesLoaded >= MapNode.CHILDRENS) {
-                if (this.parentNode.subdivided) {
-                    this.parentNode.isMesh = false;
-                    if (this.parentNode.material) {
-                        this.parentNode.material.colorWrite = false;
-                        this.parentNode.material.depthWrite = true;
-                    }
-                    this.parentNode.renderOrder = -1;
-                }
+                // Make children visible
                 this.parentNode.children.forEach(child => {
                     child.visible = true;
                     child.renderOrder = 0;
                 });
+                
+                // Hide parent mesh when subdivided
+                if (this.parentNode.subdivided) {
+                    this.parentNode.isMesh = false;
+                }
             }
         } else {
             this.visible = true;
@@ -319,15 +317,20 @@ export class MapPlaneNode extends MapNode {
     static BASE_GEOMETRY = MapPlaneNode.GEOMETRY;
     static BASE_SCALE = new THREE.Vector3(UnitsUtils.EARTH_PERIMETER, 1, UnitsUtils.EARTH_PERIMETER);
     
-    constructor(parentNode = null, mapView = null, location = MapNode.ROOT, level = 7, x = 20, y = 49) {
+    constructor(parentNode = null, mapView = null, location = MapNode.ROOT, level = null, x = null, y = null) {
+        // If level/x/y not provided and this is the root node, use mapView's rootLocation
+        if (level === null && mapView?.rootLocation) {
+            level = mapView.rootLocation.level;
+            x = mapView.rootLocation.x;
+            y = mapView.rootLocation.y;
+        }
+        
         super(parentNode, mapView, location, level, x, y, MapPlaneNode.GEOMETRY, 
             new THREE.MeshBasicMaterial({
                 disableEnvMap: false,
                 depthTest: false,
-                depthWrite: true,
-                side: THREE.FrontSide,
-                transparent: false,
-                wireframe: false
+                depthWrite: false,
+                side: THREE.FrontSide
             })
         );
         this.matrixAutoUpdate = false;
@@ -364,7 +367,7 @@ export class MapPlaneNode extends MapNode {
 }
 
 export class MapHeightNode extends MapPlaneNode {
-    constructor(parentNode = null, mapView = null, location = MapNode.ROOT, level = 7, x = 20, y = 49) {
+    constructor(parentNode = null, mapView = null, location = MapNode.ROOT, level = null, x = null, y = null) {
         super(parentNode, mapView, location, level, x, y);
         this.heightLoaded = false;
         this.textureLoaded = false;
