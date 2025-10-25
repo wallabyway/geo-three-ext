@@ -1,14 +1,17 @@
-# geo-three-ext
+# geo-three-ext: Add maps to your APS Viewer
 
-UPDATE: Now with Terrain:
+New Features Added:
+- Terrain Measurement Tool
+- Export to geoJson
+- lat/long to tile (zoom to lat/long)
+- double click to zoom to terrain
+- wheel-mouse-zoom to set pivot on terrain
 
-https://github.com/user-attachments/assets/9488c2ba-544a-4218-95fc-421350ba24e7
+Click gif for full video:
 
-**NEW: Polyline Measurement Tool with localStorage persistence:**
+<a href="https://public-blogs.s3.us-west-2.amazonaws.com/geo-three-w-geojson.mp4"><img width="640px" src="https://github.com/user-attachments/assets/4d8e889e-c01d-4d21-9818-df83909ab21d"></img></a>
 
-![Polyline Tool](https://github.com/user-attachments/assets/5f51457d-d9df-41d2-9772-4f41c124c980)
-
-Add maps to your Forge Viewer 3D scene, like ESRI ArcGIS, Mapbox, Bing Maps, Google Maps, and more. Expert-level refactored with ES6 modules, modern async/await patterns, and optimized LOD system. **Now defaults to ESRI basemaps (no API key required!)**
+Add maps to your APS Viewer 3D scene, like ESRI ArcGIS, Mapbox, Bing Maps, Google Maps, and more. Expert-level refactored with ES6 modules, modern async/await patterns, and optimized LOD system. **Now defaults to ESRI basemaps (no API key required!)**
 
 
 Inspired by the [geo-three library](https://github.com/tentone/geo-three), optimized for 'Planar' and 'HEIGHT' modes with dynamic level-of-detail.
