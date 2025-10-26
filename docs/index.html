@@ -49,6 +49,7 @@
 <script type="module">
 import './geo-three.ext.js';
 import './polyline-ext.mjs';
+import './align-ext.mjs';
 
 let viewer = null;
 
@@ -63,7 +64,7 @@ async function initViewer(urn) {
     Autodesk.Viewing.Initializer(options, async () => {
         const div = document.getElementById('viewer');
         const config = {
-            extensions: ['PolylineToolExtension', 'GeoThreeExtension']
+            extensions: ['PolylineToolExtension', 'GeoThreeExtension', 'AlignToolExtension']
         };
 
         viewer = new Autodesk.Viewing.Private.GuiViewer3D(div, config);
