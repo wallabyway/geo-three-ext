@@ -187,34 +187,80 @@ viewer.impl.invalidate(true, true, true);
    - Import align-ext.mjs
    - Add 'AlignToolExtension' to extensions list
 
-### How to Use
-1. Load the viewer with a BIM model and terrain
-2. Click the alignment tool button in the toolbar (distance icon)
-3. Click on a point on the BIM model
-4. Click on the corresponding point on the terrain
-5. Watch the model smoothly animate into position
-6. Transform is automatically saved to localStorage
-7. Press ESC to cancel at any time
-8. Use Reset button to clear transform and return to original position
+2. **`docs/align-tool.mjs`** (Updated in Phase 3)
+   - Added `animateToTransform()` helper method for reusable smooth animations
+   - Refactored `performAlignment()` to use helper method
+   
+3. **`docs/align-ext.mjs`** (Updated in Phase 3)
+   - Added SimpleAlignTool import and registration
+   - Added Quick Move tool button (orange/move icon)
+   - Updated Reset button to use smooth animation
+   - Added unload support for both tools
 
-### Features Implemented (Phase 1 + Phase 2)
+### New Files (Phase 3)
+1. **`docs/simple-align-tool.mjs`** - Quick Move tool
+   - Single-line translation only
+   - Orange visual style (markers and lines)
+   - 2-step workflow
+   - 1.5 second animation
+   - No rotation or scale
+
+### How to Use
+
+**Option 1: Quick Move Tool (Recommended First Step)**
+1. Load the viewer with a BIM model and terrain
+2. Click the **Quick Move** button (first button, orange/move icon)
+3. Click on any point on the BIM model
+4. Click where you want that point on the terrain
+5. Model smoothly moves into place (1.5 seconds)
+6. Press ESC to cancel at any time
+
+**Option 2: Full Alignment Tool (For Precision)**
+1. Click the **Full Align** button (second button, distance icon)
+2. Click on first point on the BIM model (e.g., corner)
+3. Click on corresponding point on terrain → First line drawn
+4. Click on second point on the BIM model (e.g., opposite corner)
+5. Click on corresponding second point on terrain → Second line drawn
+6. Watch the model smoothly rotate, scale, and translate (2 seconds)
+7. Transform is automatically saved to localStorage
+8. Press ESC to cancel at any time
+
+**Reset Transform**
+- Click the **Reset** button (third button) to smoothly animate back to original position
+
+### Features Implemented (Phases 1-3)
+
+**Core Alignment Features:**
 - ✅ Point picking with raycasting on model and terrain
-- ✅ Visual feedback: blue lines and circle markers
+- ✅ Visual feedback: blue/orange lines and circle markers
 - ✅ Preview line during point selection (rubber band effect)
-- ✅ Smooth ease-in-out animation (2 seconds)
+- ✅ Smooth ease-in-out animations
 - ✅ Transform calculation using THREE.Matrix4
 - ✅ Persistence to localStorage with model URN
 - ✅ Auto-restore transform on model load
 - ✅ ESC key to cancel
-- ✅ Reset button to clear transform
-- ✅ Status messages showing current step (4 steps total)
+- ✅ Status messages showing current step
 - ✅ Screen-space consistent marker and line sizes
 - ✅ Integration with existing GeoThreeExtension (tile location anchor)
-- ✅ **Two-point alignment with full TRS transformation**
-- ✅ **Second line drawing for rotation reference**
-- ✅ **Vector alignment using quaternion rotation**
-- ✅ **Scale calculation from vector length ratios**
-- ✅ **Rotation pivot around first terrain point**
+
+**Full Alignment Tool (Blue):**
+- ✅ Two-point alignment with full TRS transformation
+- ✅ Second line drawing for rotation reference
+- ✅ Vector alignment using quaternion rotation (Z-axis only)
+- ✅ Planar rotation - never flips building
+- ✅ Scale calculation from vector length ratios
+- ✅ Proper point offset accounting
+- ✅ 4-step workflow (2 seconds animation)
+
+**Quick Move Tool (Orange):**
+- ✅ Single-line translation only
+- ✅ Fast 2-step workflow (1.5 seconds animation)
+- ✅ No rotation or scale - just movement
+- ✅ Perfect for rough positioning
+
+**Reset Feature:**
+- ✅ Smooth animated reset to identity transform
+- ✅ Clears saved transforms from localStorage
 
 ### Phase 2 Technical Details
 **Two-Point Alignment Algorithm**:
@@ -237,9 +283,59 @@ viewer.impl.invalidate(true, true, true);
 - ✅ **Proper point alignment**: Accounts for model origin offset from clicked points
 - ✅ **Accurate pivot**: Rotation happens such that clicked points align exactly
 
-### Next Steps (Phase 3)
+### Phase 3: UX Improvements ✅ IMPLEMENTED
+**Status**: Complete
+
+**New Features**:
+1. ✅ **Smooth Reset Animation** - Reset button now animates model back to identity transform
+2. ✅ **Quick Move Tool** (Simple Alignment) - Single-line translation only for fast positioning
+
+### Simple Alignment Tool (Quick Move)
+A streamlined tool for rapid model positioning without rotation or scale:
+
+**Features**:
+- **Orange visual style** to differentiate from full alignment tool
+- **2-step workflow**: Click model point → Click terrain point → Done!
+- **Translation only** - No rotation, no scale, just moves the model
+- **Faster animation** - 1.5 seconds instead of 2 seconds
+- **Perfect for rough positioning** before using full alignment tool
+
+**Workflow**:
+1. Click Quick Move tool button (orange/move icon)
+2. Click any point on the model
+3. Click where you want that point to be on the terrain
+4. Model smoothly moves into place
+
+**Use Case**: Quickly move your model close to the correct location on terrain, then use the full alignment tool for precise rotation and scale adjustment.
+
+### Phase 4: Code Quality Improvements ✅ IMPLEMENTED
+**Status**: Complete - Refactored localStorage handling
+
+**New Files**:
+1. **`docs/storage-utils.mjs`** - Centralized localStorage utility module
+   - `StorageManager` - Base class with safe get/set/remove/has/clear methods
+   - `MapLocationStorage` - Helper for map location (lat/lon/zoom)
+   - `PolylineStorage` - Helper for polyline data
+   - `ModelTransformStorage` - Helper for model transforms with Matrix4 conversion
+   - `getModelURN()` - Utility to extract model URN consistently
+
+**Refactored Files**:
+- ✅ `docs/align-tool.mjs` - Uses ModelTransformStorage
+- ✅ `docs/align-ext.mjs` - Uses ModelTransformStorage & getModelURN
+- ✅ `docs/geo-three.ext.js` - Uses MapLocationStorage, exports storage utils
+- ✅ `docs/polyline-ext.mjs` - Uses MapLocationStorage
+- ✅ `docs/polyline-tool.js` - Uses PolylineStorage
+
+**Benefits**:
+- ✅ **DRY Principle**: No duplicate localStorage code
+- ✅ **Type Safety**: Specific helpers for each data type
+- ✅ **Error Handling**: Centralized try-catch with console warnings
+- ✅ **Maintainability**: Single source of truth for storage keys
+- ✅ **Expert-Level**: Clean, modular architecture like a professional library
+- ✅ **Easy Testing**: Storage logic isolated and mockable
+
+### Next Steps (Phase 5)
 - ⬜ Optional: Disable scale if not desired (add toggle)
-- ⬜ Optional: Save transforms to localStorage (skipped for now per user request)
 - ⬜ Optional: Support for multiple models with JSON array of URNs + TRS
-- ⬜ Optional: Lat/long anchor persistence
+- ⬜ Optional: Lat/long anchor persistence with GeoJSON
 

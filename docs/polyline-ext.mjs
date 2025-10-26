@@ -1,4 +1,5 @@
 import { UnitsUtils, PolylineExporter } from './utils.mjs';
+import { MapLocationStorage } from './storage-utils.mjs';
 
 // Location Dialog Panel
 class LocationPanel extends Autodesk.Viewing.UI.DockingPanel {
@@ -33,22 +34,11 @@ class LocationPanel extends Autodesk.Viewing.UI.DockingPanel {
         const geoExt = this.viewer ? this.viewer.getExtension('GeoThreeExtension') : null;
         const currentLocation = geoExt ? geoExt.getTileLocation() : null;
         
-        // Load saved values from localStorage
-        const saved = localStorage.getItem('map-location-dialog');
-        let defaultLat = 37.8;
-        let defaultLon = -122.4;
-        let defaultZoom = currentLocation ? currentLocation.level : 7;
-        
-        if (saved) {
-            try {
-                const parsed = JSON.parse(saved);
-                defaultLat = parsed.lat ?? defaultLat;
-                defaultLon = parsed.lon ?? defaultLon;
-                defaultZoom = parsed.zoom ?? defaultZoom;
-            } catch (e) {
-                console.warn('Failed to parse saved location', e);
-            }
-        }
+        // Load saved location or use defaults
+        const defaultZoom = currentLocation ? currentLocation.level : 7;
+        const saved = MapLocationStorage.getOrDefault(37.8, -122.4, defaultZoom);
+        const defaultLat = saved.lat;
+        const defaultLon = saved.lon;
         
         // Create content with styles
         const contentDiv = document.createElement('div');
@@ -174,8 +164,8 @@ class LocationPanel extends Autodesk.Viewing.UI.DockingPanel {
     }
     
     applyLocation(lat, lon, zoom) {
-        // Save to localStorage
-        localStorage.setItem('map-location-dialog', JSON.stringify({ lat, lon, zoom }));
+        // Save to localStorage using storage utility
+        MapLocationStorage.set(lat, lon, zoom);
         
         // Convert lat/lon to tile coordinates
         const tile = UnitsUtils.pointToTile(lon, lat, zoom);

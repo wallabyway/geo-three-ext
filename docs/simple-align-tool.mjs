@@ -1,9 +1,7 @@
-import { ModelTransformStorage, getModelURN } from './storage-utils.mjs';
+// Custom target cursor for simple alignment tool
+const SIMPLE_ALIGN_CURSOR = `url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="15" fill="none" stroke="black" stroke-width="2"/><circle cx="16" cy="16" r="14" fill="none" stroke="white" stroke-width="1"/><path d="M 16 4 L 16 28 M 4 16 L 28 16" stroke="black" stroke-width="2.5"/><path d="M 16 4 L 16 28 M 4 16 L 28 16" stroke="white" stroke-width="1.5"/><circle cx="16" cy="16" r="3" fill="white" stroke="black" stroke-width="1.5"/></svg>') 16 16, crosshair`;
 
-// Custom target cursor for alignment tool
-const ALIGN_CURSOR = `url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="15" fill="none" stroke="black" stroke-width="2"/><circle cx="16" cy="16" r="14" fill="none" stroke="white" stroke-width="1"/><path d="M 16 4 L 16 28 M 4 16 L 28 16" stroke="black" stroke-width="2.5"/><path d="M 16 4 L 16 28 M 4 16 L 28 16" stroke="white" stroke-width="1.5"/><circle cx="16" cy="16" r="3" fill="white" stroke="black" stroke-width="1.5"/></svg>') 16 16, crosshair`;
-
-const ALIGN_COLOR = 0x125CCC; // Blue color matching polyline tool
+const SIMPLE_ALIGN_COLOR = 0xFF8800; // Orange color to differentiate from full alignment tool
 
 // Animation helper functions from APS blog
 function makeEaseOut(timing) { 
@@ -32,34 +30,30 @@ function animate({timing, draw, duration}) {
 // Tool states
 const ToolState = {
     INACTIVE: 'inactive',
-    PICKING_MODEL_POINT_1: 'picking_model_point_1',
-    PICKING_TERRAIN_POINT_1: 'picking_terrain_point_1',
-    PICKING_MODEL_POINT_2: 'picking_model_point_2',
-    PICKING_TERRAIN_POINT_2: 'picking_terrain_point_2',
+    PICKING_MODEL_POINT: 'picking_model_point',
+    PICKING_TERRAIN_POINT: 'picking_terrain_point',
     ANIMATING: 'animating'
 };
 
-export class AlignTool extends Autodesk.Viewing.ToolInterface {
+export class SimpleAlignTool extends Autodesk.Viewing.ToolInterface {
     constructor(viewer, snapper) {
         super();
         this.viewer = viewer;
         this.snapper = snapper;
-        this.names = ['align-tool'];
+        this.names = ['simple-align-tool'];
         this.active = false;
         this.state = ToolState.INACTIVE;
         this.raycaster = new THREE.Raycaster();
         
-        // Current alignment data - two pairs of points
-        this.modelPoint1 = null;
-        this.terrainPoint1 = null;
-        this.modelPoint2 = null;
-        this.terrainPoint2 = null;
+        // Current alignment data
+        this.modelPoint = null;
+        this.terrainPoint = null;
         
         // Visual elements
         this.pointMarkers = [];
-        this.lines = [];
+        this.line = null;
         this.previewLine = null;
-        this.overlayName = 'align-tool-overlay';
+        this.overlayName = 'simple-align-tool-overlay';
         
         // Status message element
         this.statusElement = null;
@@ -78,7 +72,7 @@ export class AlignTool extends Autodesk.Viewing.ToolInterface {
     }
     
     getCursor() {
-        return ALIGN_CURSOR;
+        return SIMPLE_ALIGN_CURSOR;
     }
     
     activate(name, viewer) {
@@ -92,8 +86,8 @@ export class AlignTool extends Autodesk.Viewing.ToolInterface {
             this.createStatusElement();
             
             this.active = true;
-            this.state = ToolState.PICKING_MODEL_POINT_1;
-            this.viewer.canvas.style.cursor = ALIGN_CURSOR;
+            this.state = ToolState.PICKING_MODEL_POINT;
+            this.viewer.canvas.style.cursor = SIMPLE_ALIGN_CURSOR;
             
             this.updateStatusMessage();
             
@@ -137,7 +131,7 @@ export class AlignTool extends Autodesk.Viewing.ToolInterface {
             top: 80px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(18, 92, 204, 0.95);
+            background: rgba(255, 136, 0, 0.95);
             color: white;
             padding: 12px 20px;
             border-radius: 6px;
@@ -154,20 +148,14 @@ export class AlignTool extends Autodesk.Viewing.ToolInterface {
         if (!this.statusElement) return;
         
         switch (this.state) {
-            case ToolState.PICKING_MODEL_POINT_1:
-                this.statusElement.textContent = 'Step 1/4: Click on first point on the BIM model';
+            case ToolState.PICKING_MODEL_POINT:
+                this.statusElement.textContent = 'Quick Move: Click point on BIM model';
                 break;
-            case ToolState.PICKING_TERRAIN_POINT_1:
-                this.statusElement.textContent = 'Step 2/4: Click on corresponding point on terrain';
-                break;
-            case ToolState.PICKING_MODEL_POINT_2:
-                this.statusElement.textContent = 'Step 3/4: Click on second point on the BIM model';
-                break;
-            case ToolState.PICKING_TERRAIN_POINT_2:
-                this.statusElement.textContent = 'Step 4/4: Click on second corresponding point on terrain';
+            case ToolState.PICKING_TERRAIN_POINT:
+                this.statusElement.textContent = 'Quick Move: Click target point on terrain';
                 break;
             case ToolState.ANIMATING:
-                this.statusElement.textContent = 'Aligning model with rotation...';
+                this.statusElement.textContent = 'Moving model...';
                 break;
         }
     }
@@ -192,16 +180,11 @@ export class AlignTool extends Autodesk.Viewing.ToolInterface {
     handleMouseMove(event) {
         if (!this.active || this.state === ToolState.ANIMATING) return false;
         
-        // Show preview line when picking terrain points
-        if (this.state === ToolState.PICKING_TERRAIN_POINT_1 && this.modelPoint1) {
+        // Show preview line when we have first point
+        if (this.state === ToolState.PICKING_TERRAIN_POINT && this.modelPoint) {
             const terrainHit = this.getTerrainHitAtMouse(event);
             if (terrainHit) {
-                this._updatePreview(this.modelPoint1, terrainHit);
-            }
-        } else if (this.state === ToolState.PICKING_TERRAIN_POINT_2 && this.modelPoint2) {
-            const terrainHit = this.getTerrainHitAtMouse(event);
-            if (terrainHit) {
-                this._updatePreview(this.modelPoint2, terrainHit);
+                this._updatePreview(this.modelPoint, terrainHit);
             }
         }
         
@@ -214,53 +197,29 @@ export class AlignTool extends Autodesk.Viewing.ToolInterface {
     handleSingleClick(event, button) {
         if (!this.active || button !== 0 || this.state === ToolState.ANIMATING) return false;
         
-        if (this.state === ToolState.PICKING_MODEL_POINT_1) {
-            // Pick first point on BIM model
+        if (this.state === ToolState.PICKING_MODEL_POINT) {
+            // Pick point on BIM model
             const modelHit = this.getModelHitAtMouse(event);
             if (modelHit) {
-                this.modelPoint1 = modelHit;
+                this.modelPoint = modelHit;
                 this._drawPoint(modelHit);
-                this.state = ToolState.PICKING_TERRAIN_POINT_1;
+                this.state = ToolState.PICKING_TERRAIN_POINT;
                 this.updateStatusMessage();
                 return true;
             }
-        } else if (this.state === ToolState.PICKING_TERRAIN_POINT_1) {
-            // Pick first point on terrain
+        } else if (this.state === ToolState.PICKING_TERRAIN_POINT) {
+            // Pick point on terrain
             const terrainHit = this.getTerrainHitAtMouse(event);
             if (terrainHit) {
-                this.terrainPoint1 = terrainHit;
+                this.terrainPoint = terrainHit;
                 this._removePreview();
                 this._drawPoint(terrainHit);
-                this._drawLine(this.modelPoint1, terrainHit);
+                this._drawLine(this.modelPoint, terrainHit);
                 
-                // Move to second point picking
-                this.state = ToolState.PICKING_MODEL_POINT_2;
-                this.updateStatusMessage();
-                return true;
-            }
-        } else if (this.state === ToolState.PICKING_MODEL_POINT_2) {
-            // Pick second point on BIM model
-            const modelHit = this.getModelHitAtMouse(event);
-            if (modelHit) {
-                this.modelPoint2 = modelHit;
-                this._drawPoint(modelHit);
-                this.state = ToolState.PICKING_TERRAIN_POINT_2;
-                this.updateStatusMessage();
-                return true;
-            }
-        } else if (this.state === ToolState.PICKING_TERRAIN_POINT_2) {
-            // Pick second point on terrain
-            const terrainHit = this.getTerrainHitAtMouse(event);
-            if (terrainHit) {
-                this.terrainPoint2 = terrainHit;
-                this._removePreview();
-                this._drawPoint(terrainHit);
-                this._drawLine(this.modelPoint2, terrainHit);
-                
-                // Start animation with full TRS
+                // Start animation - translation only
                 this.state = ToolState.ANIMATING;
                 this.updateStatusMessage();
-                this.performAlignment();
+                this.performSimpleAlignment();
                 return true;
             }
         }
@@ -308,10 +267,10 @@ export class AlignTool extends Autodesk.Viewing.ToolInterface {
         const camera = this.viewer.navigation.getCamera();
         outerCircle.lookAt(camera.position);
         
-        // Create inner circle (blue fill)
+        // Create inner circle (orange fill)
         const innerGeometry = new THREE.CircleGeometry(0.7, 32);
         const innerMaterial = new THREE.MeshBasicMaterial({ 
-            color: ALIGN_COLOR,
+            color: SIMPLE_ALIGN_COLOR,
             depthTest: false,
             depthWrite: false,
             side: THREE.FrontSide
@@ -336,8 +295,8 @@ export class AlignTool extends Autodesk.Viewing.ToolInterface {
     }
     
     _drawLine(start, end) {
-        const line = this._createLine(start, end, ALIGN_COLOR, 0.8);
-        this.lines.push(line);
+        const line = this._createLine(start, end, SIMPLE_ALIGN_COLOR, 0.8);
+        this.line = line;
         this.viewer.overlays.addMesh(line, this.overlayName);
         this.viewer.impl.invalidate(true);
     }
@@ -345,7 +304,7 @@ export class AlignTool extends Autodesk.Viewing.ToolInterface {
     _updatePreview(start, end) {
         this._removePreview();
         
-        const previewLine = this._createLine(start, end, ALIGN_COLOR, 0.6, true);
+        const previewLine = this._createLine(start, end, SIMPLE_ALIGN_COLOR, 0.6, true);
         this.viewer.overlays.addMesh(previewLine, this.overlayName);
         this.previewLine = previewLine;
         
@@ -440,12 +399,10 @@ export class AlignTool extends Autodesk.Viewing.ToolInterface {
     }
     
     _updateVisualScales() {
-        // Update all line scales
-        this.lines.forEach(line => {
-            if (line.userData.p1 && line.userData.p2) {
-                this._setCylinderScale(line, line.userData.p1, line.userData.p2);
-            }
-        });
+        // Update line scale
+        if (this.line && this.line.userData.p1 && this.line.userData.p2) {
+            this._setCylinderScale(this.line, this.line.userData.p1, this.line.userData.p2);
+        }
         
         // Update preview line scale
         if (this.previewLine && this.previewLine.userData.p1 && this.previewLine.userData.p2) {
@@ -464,20 +421,39 @@ export class AlignTool extends Autodesk.Viewing.ToolInterface {
         });
     }
     
-    animateToTransform(targetTransform, onComplete) {
+    performSimpleAlignment() {
         // Get the main model (first loaded model)
         const model = this.viewer.model;
         if (!model) {
-            console.error('No model found to animate');
+            console.error('No model found to align');
+            this.reset();
             return;
         }
         
         // Get current placement transform
         const currentTransform = model.getPlacementTransform() || new THREE.Matrix4();
-        const startTransform = currentTransform.clone();
+        
+        // Decompose current transform
+        const currentPos = new THREE.Vector3();
+        const currentQuat = new THREE.Quaternion();
+        const currentScale = new THREE.Vector3();
+        currentTransform.decompose(currentPos, currentQuat, currentScale);
+        
+        // Calculate translation - simple offset from model origin
+        // Vector from model origin to modelPoint (in world space)
+        const mpRelativeToOrigin = new THREE.Vector3().subVectors(this.modelPoint, currentPos);
+        
+        // Calculate new model position so that modelPoint ends up at terrainPoint
+        // We want: newModelPos + mpRelativeToOrigin = terrainPoint
+        const targetPos = new THREE.Vector3().subVectors(this.terrainPoint, mpRelativeToOrigin);
+        
+        // Compose target transform (keep rotation and scale unchanged)
+        const targetTransform = new THREE.Matrix4();
+        targetTransform.compose(targetPos, currentQuat, currentScale);
         
         // Animate the transformation
         const easeOut = makeEaseOut(circ);
+        const startTransform = currentTransform.clone();
         
         animate({
             timing: easeOut,
@@ -496,150 +472,34 @@ export class AlignTool extends Autodesk.Viewing.ToolInterface {
                 const targScale = new THREE.Vector3();
                 targetTransform.decompose(targPos, targQuat, targScale);
                 
-                // Interpolate position
+                // Interpolate position only (rotation and scale stay the same)
                 const interpPos = startPos.clone().lerp(targPos, progress);
                 
-                // Interpolate rotation
-                const interpQuat = startQuat.clone().slerp(targQuat, progress);
-                
-                // Interpolate scale
-                const interpScale = startScale.clone().lerp(targScale, progress);
-                
                 // Compose the interpolated transform
-                interpolatedTransform.compose(interpPos, interpQuat, interpScale);
+                interpolatedTransform.compose(interpPos, targQuat, targScale);
                 
                 // Apply to model
                 model.setPlacementTransform(interpolatedTransform);
                 this.viewer.impl.invalidate(true, true, true);
             },
-            duration: 2000 // 2 seconds
+            duration: 1500 // 1.5 seconds (faster than full alignment)
         });
         
-        // After animation completes, call callback
-        if (onComplete) {
-            setTimeout(onComplete, 2100);
-        }
-    }
-    
-    performAlignment() {
-        // Get the main model (first loaded model)
-        const model = this.viewer.model;
-        if (!model) {
-            console.error('No model found to align');
-            this.reset();
-            return;
-        }
-        
-        // Get current placement transform
-        const currentTransform = model.getPlacementTransform() || new THREE.Matrix4();
-        const startTransform = currentTransform.clone();
-        
-        // Decompose current transform
-        const currentPos = new THREE.Vector3();
-        const currentQuat = new THREE.Quaternion();
-        const currentScale = new THREE.Vector3();
-        currentTransform.decompose(currentPos, currentQuat, currentScale);
-        
-        // Calculate model vector - PROJECT TO XY PLANE for planar rotation only
-        const modelVector = new THREE.Vector3().subVectors(this.modelPoint2, this.modelPoint1);
-        modelVector.z = 0; // Project to ground plane
-        const modelLength = modelVector.length();
-        
-        // Calculate terrain vector - PROJECT TO XY PLANE
-        const terrainVector = new THREE.Vector3().subVectors(this.terrainPoint2, this.terrainPoint1);
-        terrainVector.z = 0; // Project to ground plane
-        const terrainLength = terrainVector.length();
-        
-        // Calculate planar rotation angle (around Z-axis only)
-        const modelAngle = Math.atan2(modelVector.y, modelVector.x);
-        const terrainAngle = Math.atan2(terrainVector.y, terrainVector.x);
-        const rotationAngle = terrainAngle - modelAngle;
-        
-        // Create rotation quaternion around Z-axis only
-        const rotationQuat = new THREE.Quaternion();
-        rotationQuat.setFromAxisAngle(new THREE.Vector3(0, 0, 1), rotationAngle);
-        
-        // Calculate scale factor (optional - can disable if not wanted)
-        const scaleFactor = terrainLength / modelLength;
-        
-        // Calculate the transformation:
-        // We need to rotate the model around modelPoint1, then move modelPoint1 to terrainPoint1
-        
-        // Step 1: Calculate where modelPoint1 would be after rotation around the model origin
-        // Vector from model origin to modelPoint1 (in world space, relative to current position)
-        const mp1RelativeToOrigin = new THREE.Vector3().subVectors(this.modelPoint1, currentPos);
-        
-        // Rotate this vector
-        const mp1AfterRotation = mp1RelativeToOrigin.clone().applyQuaternion(rotationQuat);
-        
-        // Step 2: Scale the offset (if scaling)
-        mp1AfterRotation.multiplyScalar(scaleFactor);
-        
-        // Step 3: Calculate new model position
-        // We want: newModelPos + mp1AfterRotation = terrainPoint1
-        const targetPos = new THREE.Vector3().subVectors(this.terrainPoint1, mp1AfterRotation);
-        
-        // Step 4: Apply rotation to current quaternion
-        const targetQuat = rotationQuat.multiply(currentQuat.clone());
-        
-        // Step 5: Apply scale
-        const targetScale = currentScale.clone().multiplyScalar(scaleFactor);
-        
-        // Compose target transform
-        const targetTransform = new THREE.Matrix4();
-        targetTransform.compose(targetPos, targetQuat, targetScale);
-        
-        // Animate the transformation using the helper method
-        this.animateToTransform(targetTransform, () => {
-            // After animation completes, save and reset
-            this.saveTransform(targetTransform);
+        // After animation completes, cleanup and reset
+        setTimeout(() => {
             this.cleanup();
             this.reset();
-        });
-    }
-    
-    saveTransform(transform) {
-        const model = this.viewer.model;
-        if (!model) return;
-        
-        const urn = getModelURN(model);
-        
-        // Get lat/lon anchor from GeoThreeExtension
-        const geoExt = this.viewer.getExtension('GeoThreeExtension');
-        const tileLocation = geoExt ? geoExt.getTileLocation() : null;
-        
-        // Convert transform to storable data and save
-        const transformData = ModelTransformStorage.fromMatrix4(transform, tileLocation);
-        const success = ModelTransformStorage.set(urn, transformData);
-        
-        if (success) {
-            console.log('Transform saved for model:', urn);
-        }
-    }
-    
-    loadTransform(model) {
-        const urn = getModelURN(model);
-        const transformData = ModelTransformStorage.get(urn);
-        
-        if (transformData) {
-            const transform = ModelTransformStorage.toMatrix4(transformData);
-            model.setPlacementTransform(transform);
-            this.viewer.impl.invalidate(true, true, true);
-            console.log('Transform loaded for model:', urn);
-            return true;
-        }
-        
-        return false;
+        }, 1600);
     }
     
     cleanup() {
         // Remove all visual elements
         this._removePreview();
         
-        this.lines.forEach(line => {
-            this.viewer.overlays.removeMesh(line, this.overlayName);
-        });
-        this.lines = [];
+        if (this.line) {
+            this.viewer.overlays.removeMesh(this.line, this.overlayName);
+            this.line = null;
+        }
         
         this.pointMarkers.forEach(marker => {
             this.viewer.overlays.removeMesh(marker, this.overlayName);
@@ -655,11 +515,9 @@ export class AlignTool extends Autodesk.Viewing.ToolInterface {
     }
     
     reset() {
-        this.modelPoint1 = null;
-        this.terrainPoint1 = null;
-        this.modelPoint2 = null;
-        this.terrainPoint2 = null;
-        this.state = ToolState.PICKING_MODEL_POINT_1;
+        this.modelPoint = null;
+        this.terrainPoint = null;
+        this.state = ToolState.PICKING_MODEL_POINT;
         this.updateStatusMessage();
     }
 }

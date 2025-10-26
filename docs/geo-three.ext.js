@@ -1,10 +1,12 @@
 import { MapView, LODRaycast } from './render.mjs';
 import { ESRIMapsProvider, MapBoxProvider } from './providers.mjs';
 import { UnitsUtils } from './utils.mjs';
+import { MapLocationStorage } from './storage-utils.mjs';
 
 export * from './utils.mjs';
 export * from './providers.mjs';
 export * from './render.mjs';
+export * from './storage-utils.mjs';
 
 export class GeoThreeExtension extends Autodesk.Viewing.Extension {
     constructor(viewer, options) {
@@ -35,22 +37,15 @@ export class GeoThreeExtension extends Autodesk.Viewing.Extension {
     
     load() {
         // Load tile location from localStorage if available
-        const saved = localStorage.getItem('map-location-dialog');
-        if (saved) {
-            try {
-                const parsed = JSON.parse(saved);
-                if (parsed.lat !== undefined && parsed.lon !== undefined && parsed.zoom !== undefined) {
-                    // Convert lat/lon to tile coordinates
-                    const tile = UnitsUtils.pointToTile(parsed.lon, parsed.lat, parsed.zoom);
-                    this.defaultTileLocation = {
-                        level: parsed.zoom,
-                        x: tile[0],
-                        y: tile[1]
-                    };
-                }
-            } catch (e) {
-                console.warn('Failed to load saved location, using defaults', e);
-            }
+        const saved = MapLocationStorage.get();
+        if (saved && saved.lat !== undefined && saved.lon !== undefined && saved.zoom !== undefined) {
+            // Convert lat/lon to tile coordinates
+            const tile = UnitsUtils.pointToTile(saved.lon, saved.lat, saved.zoom);
+            this.defaultTileLocation = {
+                level: saved.zoom,
+                x: tile[0],
+                y: tile[1]
+            };
         }
         
         // Use ESRI as default provider (no API key required)

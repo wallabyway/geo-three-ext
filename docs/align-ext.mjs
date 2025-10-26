@@ -1,9 +1,12 @@
 import { AlignTool } from './align-tool.mjs';
+import { SimpleAlignTool } from './simple-align-tool.mjs';
+import { ModelTransformStorage, getModelURN } from './storage-utils.mjs';
 
 export class AlignToolExtension extends Autodesk.Viewing.Extension {
     constructor(viewer, options) {
         super(viewer, options);
         this.tool = null;
+        this.simpleTool = null;
         this.snapper = null;
         this.toolbarGroup = null;
     }
@@ -21,9 +24,13 @@ export class AlignToolExtension extends Autodesk.Viewing.Extension {
         this.viewer.toolController.registerTool(this.snapper);
         this.viewer.toolController.activateTool(this.snapper.getName());
         
-        // Create and register the align tool
+        // Create and register the full align tool
         this.tool = new AlignTool(this.viewer, this.snapper);
         this.viewer.toolController.registerTool(this.tool);
+        
+        // Create and register the simple align tool (translation only)
+        this.simpleTool = new SimpleAlignTool(this.viewer, this.snapper);
+        this.viewer.toolController.registerTool(this.simpleTool);
         
         // Listen for model loaded events to apply saved transforms
         this._onGeometryLoaded = this._onGeometryLoaded.bind(this);
@@ -59,9 +66,23 @@ export class AlignToolExtension extends Autodesk.Viewing.Extension {
             return button;
         };
         
+        this.simpleToggleButton = createButton(
+            'simple-align-toggle-button',
+            'Quick Move Tool - Translation Only (ESC to cancel)',
+            'adsk-icon-measure-move', // Move icon for simple translation
+            () => {
+                const isActive = this.simpleToggleButton.getState() === avu.Button.State.ACTIVE;
+                const newState = isActive ? avu.Button.State.INACTIVE : avu.Button.State.ACTIVE;
+                const toolAction = isActive ? 'deactivateTool' : 'activateTool';
+                
+                this.simpleToggleButton.setState(newState);
+                this.viewer.toolController[toolAction](this.simpleTool.getName());
+            }
+        );
+        
         this.toggleButton = createButton(
             'align-toggle-button',
-            'Align Model to Terrain (ESC to cancel)',
+            'Full Align Tool - Translation, Rotation & Scale (ESC to cancel)',
             'adsk-icon-measure-distance', // Using distance icon as it suggests alignment
             () => {
                 const isActive = this.toggleButton.getState() === avu.Button.State.ACTIVE;
@@ -79,32 +100,20 @@ export class AlignToolExtension extends Autodesk.Viewing.Extension {
             'adsk-icon-measure-reset',
             () => {
                 const model = this.viewer.model;
-                if (model) {
-                    // Reset to identity transform
-                    model.setPlacementTransform(new THREE.Matrix4());
-                    this.viewer.impl.invalidate(true, true, true);
-                    
-                    // Clear saved transform
-                    const modelData = model.getData();
-                    const urn = modelData?.urn || 'default-model';
-                    
-                    try {
-                        const stored = localStorage.getItem(this.tool.storageKey);
-                        if (stored) {
-                            const transforms = JSON.parse(stored);
-                            delete transforms[urn];
-                            localStorage.setItem(this.tool.storageKey, JSON.stringify(transforms));
-                        }
-                    } catch (error) {
-                        console.error('Failed to clear transform:', error);
-                    }
-                    
-                    console.log('Model transform reset');
+                if (model && this.tool) {
+                    // Use the tool's animation to smoothly reset
+                    this.tool.animateToTransform(new THREE.Matrix4(), () => {
+                        // Clear saved transform after animation
+                        const urn = getModelURN(model);
+                        ModelTransformStorage.remove(urn);
+                        console.log('Model transform reset');
+                    });
                 }
             }
         );
         
         this.subToolbar = new avu.ControlGroup('AlignToolbar');
+        this.subToolbar.addControl(this.simpleToggleButton);
         this.subToolbar.addControl(this.toggleButton);
         this.subToolbar.addControl(this.resetButton);
         
@@ -117,13 +126,22 @@ export class AlignToolExtension extends Autodesk.Viewing.Extension {
             this.viewer.removeEventListener(Autodesk.Viewing.GEOMETRY_LOADED_EVENT, this._onGeometryLoaded);
         }
         
-        // Deactivate and unregister tool
+        // Deactivate and unregister full align tool
         if (this.tool) {
             if (this.viewer.toolController.isToolActivated(this.tool.getName())) {
                 this.viewer.toolController.deactivateTool(this.tool.getName());
             }
             this.viewer.toolController.deregisterTool(this.tool);
             this.tool = null;
+        }
+        
+        // Deactivate and unregister simple align tool
+        if (this.simpleTool) {
+            if (this.viewer.toolController.isToolActivated(this.simpleTool.getName())) {
+                this.viewer.toolController.deactivateTool(this.simpleTool.getName());
+            }
+            this.viewer.toolController.deregisterTool(this.simpleTool);
+            this.simpleTool = null;
         }
         
         // Remove toolbar

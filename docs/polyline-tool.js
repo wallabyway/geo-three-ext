@@ -1,3 +1,5 @@
+import { PolylineStorage } from './storage-utils.mjs';
+
 // Custom large 'X' target cursor using SVG
 const POLYLINE_CURSOR = `url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="15" fill="none" stroke="black" stroke-width="2"/><circle cx="16" cy="16" r="14" fill="none" stroke="white" stroke-width="1"/><line x1="6" y1="6" x2="26" y2="26" stroke="black" stroke-width="2.5"/><line x1="6" y1="6" x2="26" y2="26" stroke="white" stroke-width="1.5"/><line x1="26" y1="6" x2="6" y2="26" stroke="black" stroke-width="2.5"/><line x1="26" y1="6" x2="6" y2="26" stroke="white" stroke-width="1.5"/><circle cx="16" cy="16" r="2" fill="white" stroke="black" stroke-width="1"/></svg>') 16 16, crosshair`;
 
@@ -16,7 +18,6 @@ export class PolylineMeasureTool extends Autodesk.Viewing.ToolInterface {
         this.labels = [];
         this.totalDistance = 0;
         this.overlayName = 'polyline-measure-overlay';
-        this.storageKey = 'polyline-tool-data';
         this.polylines = []; // Array of completed polylines
         this.isDataLoaded = false; // Track if storage data has been loaded
         
@@ -533,61 +534,48 @@ export class PolylineMeasureTool extends Autodesk.Viewing.ToolInterface {
     }
     
     _saveToStorage() {
-        try {
-            const data = {
-                currentPolyline: {
-                    points: this.points.map(p => ({ x: p.x, y: p.y, z: p.z })),
-                    totalDistance: this.totalDistance
-                },
-                completedPolylines: this.polylines
-            };
-            localStorage.setItem(this.storageKey, JSON.stringify(data));
-        } catch (error) {
-            console.error('Failed to save polyline data to localStorage:', error);
-        }
+        const currentPolyline = {
+            points: this.points.map(p => ({ x: p.x, y: p.y, z: p.z })),
+            totalDistance: this.totalDistance
+        };
+        PolylineStorage.set(currentPolyline, this.polylines);
     }
     
     _loadFromStorage() {
-        try {
-            const stored = localStorage.getItem(this.storageKey);
-            if (!stored) return;
+        const data = PolylineStorage.get();
+        if (!data) return;
+        
+        // Restore completed polylines
+        if (data.completedPolylines && Array.isArray(data.completedPolylines)) {
+            this.polylines = data.completedPolylines;
             
-            const data = JSON.parse(stored);
-            
-            // Restore completed polylines
-            if (data.completedPolylines && Array.isArray(data.completedPolylines)) {
-                this.polylines = data.completedPolylines;
-                
-                data.completedPolylines.forEach(polyline => {
-                    if (polyline.points && polyline.points.length > 1) {
-                        this._restorePolyline(polyline.points);
-                    }
-                });
-            }
-            
-            // Restore current polyline in progress
-            if (data.currentPolyline && data.currentPolyline.points && data.currentPolyline.points.length > 0) {
-                this.totalDistance = data.currentPolyline.totalDistance || 0;
-                
-                data.currentPolyline.points.forEach(p => {
-                    const point = new THREE.Vector3(p.x, p.y, p.z);
-                    this.points.push(point);
-                    
-                    if (this.points.length > 1) {
-                        const prevPoint = this.points[this.points.length - 2];
-                        const segmentDistance = prevPoint.distanceTo(point);
-                        this._drawLine(prevPoint, point);
-                        this._createLabel(prevPoint, point, segmentDistance);
-                    }
-                    
-                    this._drawPoint(point);
-                });
-            }
-            
-            this.viewer.impl.invalidate(true);
-        } catch (error) {
-            console.error('Failed to load polyline data from localStorage:', error);
+            data.completedPolylines.forEach(polyline => {
+                if (polyline.points && polyline.points.length > 1) {
+                    this._restorePolyline(polyline.points);
+                }
+            });
         }
+        
+        // Restore current polyline in progress
+        if (data.currentPolyline && data.currentPolyline.points && data.currentPolyline.points.length > 0) {
+            this.totalDistance = data.currentPolyline.totalDistance || 0;
+            
+            data.currentPolyline.points.forEach(p => {
+                const point = new THREE.Vector3(p.x, p.y, p.z);
+                this.points.push(point);
+                
+                if (this.points.length > 1) {
+                    const prevPoint = this.points[this.points.length - 2];
+                    const segmentDistance = prevPoint.distanceTo(point);
+                    this._drawLine(prevPoint, point);
+                    this._createLabel(prevPoint, point, segmentDistance);
+                }
+                
+                this._drawPoint(point);
+            });
+        }
+        
+        this.viewer.impl.invalidate(true);
     }
     
     _restorePolyline(pointsData) {
