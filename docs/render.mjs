@@ -328,7 +328,7 @@ export class MapPlaneNode extends MapNode {
         super(parentNode, mapView, location, level, x, y, MapPlaneNode.GEOMETRY, 
             new THREE.MeshBasicMaterial({
                 disableEnvMap: false,
-                depthTest: false,
+                depthTest: true,
                 depthWrite: false,
                 side: THREE.FrontSide
             })

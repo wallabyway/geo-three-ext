@@ -164,8 +164,8 @@ export class PolylineExporter {
      * @throws {Error} If GeoThree extension not available
      */
     getGeoContext() {
-        const geoExt = this.viewer.getExtension('GeoThreeExtension');
-        if (!geoExt) throw new Error('GeoThree extension not available');
+        const geoExt = this.viewer.getExtension('Geo.Terrain');
+        if (!geoExt) throw new Error('Geo.Terrain extension not available');
         
         const map = geoExt.map;
         const tileLocation = geoExt.getTileLocation();

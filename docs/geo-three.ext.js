@@ -1,5 +1,5 @@
 import { MapView, LODRaycast } from './render.mjs';
-import { ESRIMapsProvider, MapBoxProvider } from './providers.mjs';
+import { ESRIMapsProvider, MapBoxProvider, DebugProvider } from './providers.mjs';
 import { UnitsUtils } from './utils.mjs';
 import { MapLocationStorage } from './storage-utils.mjs';
 
@@ -48,6 +48,8 @@ export class GeoThreeExtension extends Autodesk.Viewing.Extension {
             };
         }
         
+        // Use Debug provider to show tile boundaries and coordinates
+        // this.provider = new DebugProvider();
         // Use ESRI as default provider (no API key required)
         this.provider = new ESRIMapsProvider(ESRIMapsProvider.IMAGERY);
         
@@ -100,9 +102,14 @@ export class GeoThreeExtension extends Autodesk.Viewing.Extension {
             z-index: 1000;
         `;
         
-        // Fetch copyright text from provider
-        const copyrightText = await this.provider.getAttributionText();
-        this.creditOverlay.innerHTML = copyrightText;
+        // Fetch copyright text from provider (if available)
+        if (typeof this.provider.getAttributionText === 'function') {
+            const copyrightText = await this.provider.getAttributionText();
+            this.creditOverlay.innerHTML = copyrightText;
+        } else {
+            // No attribution needed for this provider
+            this.creditOverlay.innerHTML = '';
+        }
         
         // Append to viewer container
         this.viewer.container.appendChild(this.creditOverlay);
@@ -329,5 +336,6 @@ export class GeoThreeExtension extends Autodesk.Viewing.Extension {
     }
 }
 
-Autodesk.Viewing.theExtensionManager.registerExtension('GeoThreeExtension', GeoThreeExtension);
+// Register with namespace pattern
+Autodesk.Viewing.theExtensionManager.registerExtension('Geo.Terrain', GeoThreeExtension);
 

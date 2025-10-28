@@ -1,267 +1,197 @@
 # geo-three-ext: Add maps to your APS Viewer
 
-New Features Added:
-- Terrain Measurement Tool
-- Export to geoJson
-- lat/long to tile (zoom to lat/long)
-- double click to zoom to terrain
-- wheel-mouse-zoom to set pivot on terrain
+Add interactive terrain maps and BIM alignment tools to Autodesk APS Viewer. Features terrain height mapping, polyline measurements, model alignment, and GeoJSON export. Built with expert-level ES6 patterns and optimized LOD system. **No API key required** - defaults to ESRI basemaps!
 
-Click gif for full video:
+## ✨ New Features
+- 🔧 **BIM Model Alignment** - Quick Move and Full Align tools
+- 📏 **Terrain Measurement Tool** - Multi-point polyline distances
+- 📤 **Export to GeoJSON** - Download measurements with coordinates
+- 🗺️ **Lat/Long Navigation** - Jump to any location with presets
+- 🖱️ **Double-click zoom** - Focus on terrain points
+- 🔍 **Wheel-mouse zoom** - Set pivot on terrain for natural navigation
+
+**Video Demo:**
 
 <a href="https://public-blogs.s3.us-west-2.amazonaws.com/geo-three-w-geojson.mp4"><img width="640px" src="https://github.com/user-attachments/assets/4d8e889e-c01d-4d21-9818-df83909ab21d"></img></a>
-
-Add maps to your APS Viewer 3D scene, like ESRI ArcGIS, Mapbox, Bing Maps, Google Maps, and more. Expert-level refactored with ES6 modules, modern async/await patterns, and optimized LOD system. **Now defaults to ESRI basemaps (no API key required!)**
-
 
 Inspired by the [geo-three library](https://github.com/tentone/geo-three), optimized for 'Planar' and 'HEIGHT' modes with dynamic level-of-detail.
 
 ### 🎯 DEMO: https://wallabyway.github.io/geo-three-ext/
 
+https://github.com/user-attachments/assets/9488c2ba-544a-4218-95fc-421350ba24e7
+
 ![geothree-ext](https://user-images.githubusercontent.com/440241/122155016-f92ed680-ce1a-11eb-8e92-f797e043f66e.gif)
 
+## 🎨 Features
+
+### Geo.Terrain Extension
+- **Height-mapped terrain** with real elevation data (via MapBox terrain-rgb)
+- **Multiple map providers**: ESRI (no key!), MapBox, Bing, Google, OpenStreetMap
+- **Dynamic LOD system** with interval-based raycasting for smooth tile loading
+- **Configurable basemaps**: Imagery, Topo, Streets, Oceans, and more
+
+### Geo.Tools Extension - Interactive Toolbar
+
+**Tool Modes** (mutually exclusive, radio button behavior):
+- 🟠 **Quick Move** - Fast 2-step translation (model point → terrain point)
+- 🔵 **Full Align** - Precise 4-step alignment with rotation & scale (2 model + 2 terrain points)
+- 📏 **Tape Measure** - Multi-point polyline distance measurement with GeoJSON export
+- 🌍 **Set Location** - Configure map tile location (lat/lon/zoom with presets)
+
+**Action Buttons** (contextual, shown only when relevant):
+- 🗑️ **Clear** - Remove all polylines (shown when Tape Measure active)
+- 🔄 **Reset** - Animate model back to original position (shown when alignment tools active)
+- 📤 **Export GeoJSON** - Download polylines as GeoJSON with coordinates (shown when Tape Measure active)
+
+**Smart UX**: Default shows only 4 mode buttons. Action buttons appear contextually to minimize screen clutter.
 
 ## 📦 Module Structure
 
 ```
 docs/
-├── geo-three.ext.js    # Main extension entry point
-├── utils.mjs           # Utility classes (FetchUtils, ImageLoader, CanvasUtils, UnitsUtils)
+├── geo-three.ext.js    # Geo.Terrain - Map rendering with LOD system
+├── geo.tools.mjs       # Geo.Tools - Alignment & measurement tools + toolbar
+├── storage-utils.mjs   # localStorage helpers (transforms, polylines, locations)
+├── utils.mjs           # Utilities (FetchUtils, ImageLoader, CanvasUtils, UnitsUtils)
 ├── providers.mjs       # Tile providers & async loading
-└── render.mjs          # Map nodes, geometries, LOD system & rendering
+└── render.mjs          # MapView, nodes, geometries, LOD raycasting
 ```
 
-## 🚀 GETTING STARTED
-
-### 1. Add as ES6 Module
+## 🚀 Quick Start
 
 ```html
 <!-- Load Forge Viewer -->
 <script src="https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/viewer3D.js"></script>
 
-<!-- Load extension as ES6 module -->
+<!-- Load extensions -->
 <script type="module">
-import './geo-three.ext.js';
+import './docs/geo-three.ext.js';
+import './docs/geo.tools.mjs';
 
-// Extension automatically registers with Forge Viewer
-const viewer = new Autodesk.Viewing.Private.GuiViewer3D(div, { 
-    extensions: ["GeoThreeExtension"] 
+const viewer = new Autodesk.Viewing.GuiViewer3D(container, {
+    extensions: ['Geo.Terrain', 'Geo.Tools']
 });
 </script>
 ```
 
-### 2. Or Import Directly
+**That's it!** The toolbar appears automatically with all tools ready to use.
 
+### Usage
+
+**Quick Move Tool** (Fast positioning):
+1. Click 🟠 Quick Move button
+2. Click point on BIM model
+3. Click target point on terrain → Model moves smoothly
+
+**Full Align Tool** (Precise alignment):
+1. Click 🔵 Full Align button
+2. Click first point on model → Click corresponding terrain point
+3. Click second point on model → Click corresponding terrain point
+4. Model rotates, scales, and aligns automatically (saved to localStorage)
+
+**Tape Measure Tool** (Distance measurement):
+1. Click 📏 Tape Measure button
+2. Click points on terrain to measure distances
+3. Press ESC to finish
+4. Use 📤 Export to save as GeoJSON
+
+**Set Location** (Configure map):
+1. Click 🌍 Set Location button
+2. Choose preset (NYC, SF, Munich, etc.) or enter custom lat/lon/zoom
+3. Map tiles reload at new location
+
+## ⚙️ Configuration
+
+### Map Position
 ```javascript
-import { MapView, ESRIMapsProvider } from './geo-three.ext.js';
-
-// Create provider (no API key required!)
-const provider = new ESRIMapsProvider(ESRIMapsProvider.IMAGERY);
-
-// Create 3D map
-const map = new MapView(MapView.PLANAR, provider);
+// Adjust map position to align with your model (in geo-three.ext.js)
 map.position.set(14900, -27300, -85);
-
-// Or with MapBox for terrain height data
-import { MapBoxProvider } from './geo-three.ext.js';
-const heightProvider = new MapBoxProvider(token, 'mapbox.terrain-rgb', MapBoxProvider.STYLE);
-const terrainMap = new MapView(MapView.HEIGHT, provider, heightProvider);
 ```
 
-## ⚙️ CONFIGURATION
-
-### Position Your Map
-
-Adjust the map's position to align with your model:
-
-```javascript
-map.position.set(14900, -27300, -85);
-```
-
-### Change Starting Location
-
-Modify the root node coordinates (in `render.mjs`):
-
+### Starting Location
+Use the 🌍 Set Location tool in the UI, or modify in `render.mjs`:
 ```javascript
 // San Francisco: level = 7, x = 20, y = 49
 new MapHeightNode(null, this, MapNode.ROOT, level = 7, x = 20, y = 49);
 ```
 
-### Earth Scale Mode
-
-For true Earth scale rendering:
-
+### LOD Tuning
 ```javascript
-import { UnitsUtils } from './utils.mjs';
+// Update frequency (geo-three.ext.js)
+this.updateFrequency = 50; // ms between LOD updates (default: 50)
 
-// Set Earth radius
-UnitsUtils.EARTH_RADIUS = 6378137;
-
-// Position camera at specific lat/long
-const coords = UnitsUtils.datumsToSpherical(40.7128, -74.0060); // NYC
-camera.target.set(coords.x, 0, -coords.y);
-camera.position.set(0, 1000, 0);
+// Thresholds (render.mjs)
+thresholdUp = 0.6      // Subdivide when closer
+thresholdDown = 0.4    // Simplify when farther
 ```
 
-### LOD Update Frequency & Thresholds
-
-The extension uses interval-based raycasting for continuous LOD updates, independent of camera movement.
-
-**Update Frequency** (in `geo-three.ext.js`):
-```javascript
-this.updateFrequency = 50; // Update every 50ms (default) - faster for responsive LOD
-```
-
-**LOD Thresholds** (in `render.mjs`):
-```javascript
-thresholdUp = 0.6      // Distance threshold to subdivide (zoom in)
-thresholdDown = 0.4    // Distance threshold to simplify (zoom out)
-```
-
-Higher `thresholdDown` values make tiles disappear faster when zooming out. Lower values keep detail longer but may impact performance.
-
-### Triangle Edge Outlines
-
-To visualize the triangle mesh structure, you can enable edge outlines in `render.mjs`:
-
+### Debug: Show Triangle Edges
 ```javascript
 import { MapPlaneNode } from './render.mjs';
-
-// Enable triangle edge outlines globally
-MapPlaneNode.SHOW_EDGES = true;
+MapPlaneNode.SHOW_EDGES = true; // Shows tile mesh structure
 ```
 
-Or in your extension's `load()` method:
+## 🗺️ Map Providers
 
 ```javascript
-load() {
-    // Enable edges before creating the map
-    MapPlaneNode.SHOW_EDGES = true;
-    
-    const provider = new ESRIMapsProvider(ESRIMapsProvider.IMAGERY);
-    this.map = new MapView(MapView.HEIGHT, provider, heightProvider);
-    // ...
-}
-```
+import { ESRIMapsProvider, MapBoxProvider, BingMapsProvider, 
+         GoogleMapsProvider, OpenStreetMapsProvider } from './providers.mjs';
 
-This will add black semi-transparent edge lines to all tile quads, making the mesh subdivision visible. The edge rendering automatically detects and uses the correct THREE.js API version (both older `addAttribute` and newer `setAttribute` are supported).
+// ESRI (no API key required) - Default
+const provider = new ESRIMapsProvider(ESRIMapsProvider.IMAGERY);
+// Types: IMAGERY, TOPO, STREETS, GRAY_CANVAS, OCEANS, TERRAIN, SHADED_RELIEF
 
-## 🎨 Available Providers
-
-```javascript
-import { 
-    ESRIMapsProvider,
-    MapBoxProvider,
-    BingMapsProvider,
-    GoogleMapsProvider,
-    HereMapsProvider,
-    OpenStreetMapsProvider,
-    MapTilerProvider
-} from './providers.mjs';
-
-// Mapbox
+// MapBox (token required for terrain height)
 const provider = new MapBoxProvider(token, 'mapbox/satellite-v9', MapBoxProvider.STYLE);
 
-// Bing Maps
+// Others (API key required)
 const provider = new BingMapsProvider(apiKey, BingMapsProvider.AERIAL);
-
-// Google Maps
 const provider = new GoogleMapsProvider(apiKey);
 
 // OpenStreetMap (no key needed)
 const provider = new OpenStreetMapsProvider();
-
-// ESRI ArcGIS Online (no key needed)
-const provider = new ESRIMapsProvider(ESRIMapsProvider.IMAGERY);
-```
-
-### ESRI Basemap Types
-
-ESRI provides multiple free basemap options:
-
-```javascript
-import { ESRIMapsProvider, MapView } from './geo-three.ext.js';
-
-// Available basemap types
-ESRIMapsProvider.IMAGERY          // Satellite imagery
-ESRIMapsProvider.TOPO             // Topographic map
-ESRIMapsProvider.STREETS          // Street map
-ESRIMapsProvider.GRAY_CANVAS      // Light gray canvas
-ESRIMapsProvider.OCEANS           // Ocean basemap
-ESRIMapsProvider.NATIONAL_GEOGRAPHIC  // National Geographic style
-ESRIMapsProvider.TERRAIN          // Terrain with labels
-ESRIMapsProvider.SHADED_RELIEF    // Shaded relief
-
-// Create provider with imagery
-const provider = new ESRIMapsProvider(ESRIMapsProvider.IMAGERY);
-const map = new MapView(MapView.PLANAR, provider);
-
-// Switch basemap type dynamically
-function setBasemap(type) {
-    provider.setMapType(type);
-    map.clear(); // Reload tiles with new basemap
-}
-
-// Usage
-setBasemap(ESRIMapsProvider.TOPO);
 ```
 
 ## 🏗️ Architecture
 
-### Expert-Level Patterns
+**Geo.Terrain** (`geo-three.ext.js`, `render.mjs`, `providers.mjs`, `utils.mjs`):
+- Quadtree LOD system with interval-based raycasting (50ms updates)
+- Material transparency for smooth parent→child transitions
+- Geometry caching for efficient simplification
+- Async/await tile loading, functional patterns
 
-- **Async/Await**: All tile loading uses clean async/await
-- **Functional Programming**: Array methods, pure functions where possible
-- **Modular Design**: Each module has a single responsibility
-- **ES6+**: Template literals, destructuring, arrow functions, optional chaining
+**Geo.Tools** (`geo.tools.mjs`, `storage-utils.mjs`):
+- BaseGeoTool class eliminates code duplication across tools
+- Unified toolbar manager with radio button behavior
+- Contextual action buttons (show/hide based on mode)
+- localStorage persistence for transforms, polylines, locations
+- Screen-space consistent visual elements (markers, lines, labels)
 
-### Module Responsibilities
-
-- **`utils.mjs`** - Utility classes: FetchUtils, ImageLoader, CanvasUtils, UnitsUtils
-- **`providers.mjs`** - Async tile fetching, all map providers
-- **`render.mjs`** - Quadtree nodes, terrain geometry, LOD raycasting system, MapView container
-
-### Performance Features
-
-- **Interval-based LOD** - Reliable 100ms update cycle with continuous raycasting (no camera event dependencies)
-- **Material transparency** - Parent tiles fade when children load (no z-fighting)
-- **Geometry caching** - Reuse geometries when simplifying
-- **Efficient raycasting** - Only raycast visible mesh nodes
-
-## 📚 RELATED RESOURCES
-
-### Forge + Maps Integration
-- [Simple Mapbox Tiles Extension](https://gist.github.com/wallabyway/4503609e84a2b612b27138abba8aa3b7) - Minimal example
-- [Mapbox + Revit via glTF](https://github.com/wallabyway/mapboxRevit) - Using Mapbox Viewer
-- [Mini-Map Geolocation Extension](https://forge.autodesk.com/blog/mini-map-geolocation-extension) - Retrieve geo data in browser
-- [Decode AEC Model Data](https://forge.autodesk.com/blog/consume-aec-data-which-are-model-derivative-api) - Extract Revit/AutoCAD geo info
-- [Navisworks Integration](https://forge.autodesk.com/author/eason-kang) - Latest techniques
-
-### Original Library
-- [geo-three](https://github.com/tentone/geo-three) - Original THREE.js geo-spatial library
-
-## 🎓 Code Quality
-
-This project demonstrates expert-level JavaScript:
+**Code Quality**:
+- ✅ Expert-level ES6+ patterns throughout
 - ✅ Zero callbacks - pure async/await
-- ✅ Functional patterns throughout
-- ✅ Self-documenting code
+- ✅ Functional programming, self-documenting code
 - ✅ Proper separation of concerns
-- ✅ Modern ES6+ features
-- ✅ Ready for TypeScript conversion
+- ✅ Modular, extensible architecture
 
-## 📝 Notes
+## 📚 Resources
 
-- **THREE.js**: Uses Forge Viewer's bundled THREE.js (`window.THREE`), compatible with R71+
-- **Forge Viewer Version**: Tested with Viewer v7.x
-- **Browser Support**: Modern browsers with ES6 module support
-- **Performance**: Interval-based LOD ensures smooth subdivision regardless of camera events
-- **Edge Rendering**: Automatically adapts to different THREE.js API versions
+- [geo-three](https://github.com/tentone/geo-three) - Original THREE.js geo-spatial library
+- [Simple Mapbox Tiles Extension](https://gist.github.com/wallabyway/4503609e84a2b612b27138abba8aa3b7) - Minimal example
+- [Mini-Map Geolocation Extension](https://forge.autodesk.com/blog/mini-map-geolocation-extension)
+- [Decode AEC Model Data](https://forge.autodesk.com/blog/consume-aec-data-which-are-model-derivative-api)
+
+## 📝 Technical Notes
+
+- Uses APS Viewer's bundled THREE.js (R71+), tested with Viewer v7.x
+- Requires modern browsers with ES6 module support
+- Low CPU during camera idle
+- Tools automatically save state to localStorage with model URN
 
 ## 📄 License
 
-MIT License - See [LICENSE](LICENSE) file for details
+MIT License - See [LICENSE](LICENSE) file
 
 ---
 
-**Refactored with ❤️ using expert-level ES6 patterns**
+Built with ❤️ using expert-level ES6 patterns | Inspired by [geo-three](https://github.com/tentone/geo-three)
