@@ -75,8 +75,25 @@ async function initViewer(urn) {
         });
         
         Autodesk.Viewing.Document.load(`urn:${urn}`, async (doc) => {
-            const viewables = doc.getRoot().search({role:'3d', type: "geometry"})[1];
-            await viewer.loadDocumentNode(doc, viewables);
+            // Load the 3D model first
+            const viewables3d = doc.getRoot().search({role:'3d', type: "geometry"})[1];
+            await viewer.loadDocumentNode(doc, viewables3d);
+            
+            // Load the 2D viewable as a second model
+            const guid2d = '7a2419bd-e042-4b38-8b95-781bc33e7dd8-000842cd';
+            const viewables2d = doc.getRoot().search({guid: guid2d});
+            
+            if (viewables2d && viewables2d.length > 0) {
+                const options = {
+                    keepCurrentModels: true, // Keep the first model loaded
+                    placementTransform: new THREE.Matrix4(), // Identity transform (same position)
+                    globalOffset: viewer.model.getData().globalOffset // Use same global offset
+                };
+                await viewer.loadDocumentNode(doc, viewables2d[0], options);
+                console.log('Second 2D model loaded successfully');
+            } else {
+                console.warn('2D viewable with specified GUID not found');
+            }
         });
     });
 }

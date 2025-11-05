@@ -105,7 +105,10 @@ class BaseGeoTool extends Autodesk.Viewing.ToolInterface {
     getModelHitAtMouse(event) {
         const result = this.viewer.impl.hitTest(event.canvasX, event.canvasY, false);
         if (result && result.intersectPoint) {
-            return result.intersectPoint.clone();
+            return {
+                point: result.intersectPoint.clone(),
+                model: result.model || this.viewer.model
+            };
         }
         return null;
     }
@@ -321,14 +324,14 @@ class BaseGeoTool extends Autodesk.Viewing.ToolInterface {
     // ANIMATION (Shared)
     // ========================================================================
     
-    animateToTransform(targetTransform, onComplete) {
-        const model = this.viewer.model;
-        if (!model) {
+    animateToTransform(targetTransform, onComplete, model = null) {
+        const targetModel = model || this.viewer.model;
+        if (!targetModel) {
             console.error('No model found to animate');
             return;
         }
         
-        const currentTransform = model.getPlacementTransform() || new THREE.Matrix4();
+        const currentTransform = targetModel.getPlacementTransform() || new THREE.Matrix4();
         const startTransform = currentTransform.clone();
         const easeOut = makeEaseOut(circ);
         
@@ -351,7 +354,7 @@ class BaseGeoTool extends Autodesk.Viewing.ToolInterface {
                 const interpScale = startScale.clone().lerp(targScale, progress);
                 
                 interpolatedTransform.compose(interpPos, interpQuat, interpScale);
-                model.setPlacementTransform(interpolatedTransform);
+                targetModel.setPlacementTransform(interpolatedTransform);
                 this.viewer.impl.invalidate(true, true, true);
             },
             duration: 2000
@@ -397,6 +400,7 @@ class QuickMoveTool extends BaseGeoTool {
         this.state = 'inactive';
         this.modelPoint = null;
         this.terrainPoint = null;
+        this.targetModel = null; // Store which model to move
     }
     
     activate(name, viewer) {
@@ -451,8 +455,9 @@ class QuickMoveTool extends BaseGeoTool {
         if (this.state === 'picking_model') {
             const modelHit = this.getModelHitAtMouse(event);
             if (modelHit) {
-                this.modelPoint = modelHit;
-                this._drawPoint(modelHit);
+                this.modelPoint = modelHit.point;
+                this.targetModel = modelHit.model;
+                this._drawPoint(modelHit.point);
                 this.state = 'picking_terrain';
                 this.updateStatusMessage('Quick Move: Click target point on terrain');
                 return true;
@@ -474,7 +479,7 @@ class QuickMoveTool extends BaseGeoTool {
     }
     
     performAlignment() {
-        const model = this.viewer.model;
+        const model = this.targetModel || this.viewer.model;
         if (!model) return;
         
         const currentTransform = model.getPlacementTransform() || new THREE.Matrix4();
@@ -511,6 +516,7 @@ class QuickMoveTool extends BaseGeoTool {
     reset() {
         this.modelPoint = null;
         this.terrainPoint = null;
+        this.targetModel = null;
         this.state = 'picking_model';
         this.updateStatusMessage('Quick Move: Click point on BIM model');
     }
@@ -533,6 +539,7 @@ class FullAlignTool extends BaseGeoTool {
         this.terrainPoint1 = null;
         this.modelPoint2 = null;
         this.terrainPoint2 = null;
+        this.targetModel = null; // Store which model to move
     }
     
     activate(name, viewer) {
@@ -592,8 +599,9 @@ class FullAlignTool extends BaseGeoTool {
         if (this.state === 'picking_model_1') {
             const modelHit = this.getModelHitAtMouse(event);
             if (modelHit) {
-                this.modelPoint1 = modelHit;
-                this._drawPoint(modelHit);
+                this.modelPoint1 = modelHit.point;
+                this.targetModel = modelHit.model;
+                this._drawPoint(modelHit.point);
                 this.state = 'picking_terrain_1';
                 this.updateStatusMessage('Step 2/4: Click corresponding point on terrain');
                 return true;
@@ -612,8 +620,8 @@ class FullAlignTool extends BaseGeoTool {
         } else if (this.state === 'picking_model_2') {
             const modelHit = this.getModelHitAtMouse(event);
             if (modelHit) {
-                this.modelPoint2 = modelHit;
-                this._drawPoint(modelHit);
+                this.modelPoint2 = modelHit.point;
+                this._drawPoint(modelHit.point);
                 this.state = 'picking_terrain_2';
                 this.updateStatusMessage('Step 4/4: Click second corresponding point on terrain');
                 return true;
@@ -635,7 +643,7 @@ class FullAlignTool extends BaseGeoTool {
     }
     
     performAlignment() {
-        const model = this.viewer.model;
+        const model = this.targetModel || this.viewer.model;
         if (!model) return;
         
         const currentTransform = model.getPlacementTransform() || new THREE.Matrix4();
@@ -674,17 +682,17 @@ class FullAlignTool extends BaseGeoTool {
         targetTransform.compose(targetPos, targetQuat, targetScale);
         
         this.animateToTransform(targetTransform, () => {
-            this.saveTransform(targetTransform);
+            this.saveTransform(targetTransform, model);
             this.cleanup();
             this.reset();
-        });
+        }, model);
     }
     
-    saveTransform(transform) {
-        const model = this.viewer.model;
-        if (!model) return;
+    saveTransform(transform, model = null) {
+        const targetModel = model || this.viewer.model;
+        if (!targetModel) return;
         
-        const urn = getModelURN(model);
+        const urn = getModelURN(targetModel);
         const geoExt = this.viewer.getExtension('Geo.Terrain');
         const tileLocation = geoExt ? geoExt.getTileLocation() : null;
         const transformData = ModelTransformStorage.fromMatrix4(transform, tileLocation);
@@ -708,6 +716,7 @@ class FullAlignTool extends BaseGeoTool {
         this.terrainPoint1 = null;
         this.modelPoint2 = null;
         this.terrainPoint2 = null;
+        this.targetModel = null;
         this.state = 'picking_model_1';
         this.updateStatusMessage('Step 1/4: Click first point on BIM model');
     }
@@ -1253,13 +1262,20 @@ class ToolbarManager {
             'Reset Model Transform',
             'adsk-icon-home',
             () => {
-                const model = this.viewer.model;
+                // Use the currently selected model from the active tool
+                let model = this.viewer.model;
+                if (this.currentMode === 'quickMove' && this.quickMoveTool?.targetModel) {
+                    model = this.quickMoveTool.targetModel;
+                } else if (this.currentMode === 'fullAlign' && this.fullAlignTool?.targetModel) {
+                    model = this.fullAlignTool.targetModel;
+                }
+                
                 if (model && this.fullAlignTool) {
                     this.fullAlignTool.animateToTransform(new THREE.Matrix4(), () => {
                         const urn = getModelURN(model);
                         ModelTransformStorage.remove(urn);
                         console.log('Model transform reset');
-                    });
+                    }, model);
                 }
             }
         );
