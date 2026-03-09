@@ -54,7 +54,7 @@ export class GeoThreeExtension extends Autodesk.Viewing.Extension {
         this.provider = new ESRIMapsProvider(ESRIMapsProvider.IMAGERY);
         
         // Optional: Keep MapBox for terrain height data
-        const token = "pk.eyJ1Ijoid2FsbGFieXdheSIsImEiOiJjbDV1MHF1MzkwZXAyM2tveXZjaDVlaXJpIn0.wyOgHkuGJ37Xrx1x_49gIw";
+        const token = "sk.eyJ1Ijoid2FsbGFieXdheSIsImEiOiJjbW1qdDNmaWgxNWg5MnFwenU3Mm54djcwIn0.WirBBY6ovnncEwLsf520eg";
         const heightProvider = new MapBoxProvider(token, 'mapbox.terrain-rgb', MapBoxProvider.STYLE);
         
         this.map = new MapView(MapView.HEIGHT, this.provider, heightProvider, this.defaultTileLocation);
